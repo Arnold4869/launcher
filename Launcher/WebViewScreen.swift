@@ -1,7 +1,7 @@
 import SwiftUI
 import WebKit
 
-// MARK: - 页面容器：同一个页面在全屏/悬浮两形态间切换，WebView 常驻不重建
+// MARK: - 页面容器
 
 struct PageHost: View {
     let page: PageState
@@ -20,25 +20,28 @@ struct PageHost: View {
                     .frame(width: geo.size.width, height: geo.size.height)
                     .transition(.opacity)
             }
-            // 既不悬浮也不全屏 = 后台保留（隐藏），WebView 不销毁
+            // 后台保留，WebView 不销毁
         }
     }
 }
 
-// MARK: - 悬浮窗（预览 + 拖动 + 底部拉条调大小）
+// MARK: - 悬浮窗（真实缩略图 + 标题栏 + 边角调整）
 
 struct FloatingWindow: View {
     let page: PageState
     @ObservedObject var wm: WindowManager
     let geo: GeometryProxy
 
-    @State private var dragging = false
-
     var body: some View {
         let w = wm.floatingWidth
         let h = wm.floatingHeight
+        let screen = UIScreen.main.bounds
+        // 缩略图：WebView 按全屏尺寸渲染，整体 scale 到悬浮窗大小
+        let scaleX = w / screen.width
+        let scaleY = h / screen.height
+
         VStack(spacing: 0) {
-            // 标题栏：唯一拖动窗口的区域；点书签名=切换；×=关闭
+            // 标题栏：拖=移动窗口；点书签名=切换；×=关闭
             HStack(spacing: 4) {
                 Text(page.bookmark.name)
                     .font(.system(size: 9, weight: .semibold))
@@ -52,7 +55,7 @@ struct FloatingWindow: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(.white)
-                        .padding(4)
+                        .padding(5)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -62,85 +65,83 @@ struct FloatingWindow: View {
             .background(.black.opacity(0.5))
             .frame(width: w)
             .contentShape(Rectangle())
-            // 拖标题栏移动窗口
             .gesture(
                 DragGesture(minimumDistance: 5)
                     .onChanged { v in
-                        let halfW = wm.floatingWidth / 2 + 8
-                        let halfH = wm.floatingHeight / 2 + 20
+                        let halfW = w / 2 + 8
+                        let halfH = h / 2 + 20
                         wm.floatingPos.x = max(halfW, min(geo.size.width - halfW, wm.floatingPos.x + v.translation.width / 8))
                         wm.floatingPos.y = max(halfH, min(geo.size.height - halfH, wm.floatingPos.y + v.translation.height / 8))
                     }
             )
 
-            // 页面预览（四周叠边/角把手，手势全在这层）
-            PageWebView(page: page)
-                .frame(width: w, height: h)
-                .allowsHitTesting(false)
-                .overlay {
-                    ResizeHandles(wm: wm, geo: geo)
-                }
+            // 页面区域：点中间=切换；边角=调整大小
+            ZStack {
+                // 真实缩略图：WebView 以全屏大小渲染再整体缩小
+                PageWebView(page: page)
+                    .frame(width: screen.width, height: screen.height)
+                    .scaleEffect(x: scaleX, y: scaleY, anchor: .topLeading)
+                    .allowsHitTesting(false)
+                    .frame(width: w, height: h, alignment: .topLeading)
+                    .clipped()
+
+                // 中间区域点击 = 切换
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .onTapGesture { wm.swap() }
+
+                // 边/角把手
+                ResizeHandles(wm: wm, geo: geo)
+            }
+            .frame(width: w, height: h)
         }
-        .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
+        .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 4)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .position(x: wm.floatingPos.x, y: wm.floatingPos.y)
     }
 }
 
-/// 四条边 + 四个角的调整把手
-/// 边把手：拖上下边调高、拖左右边调宽
-/// 角把手：斜向拖同时调宽高
+/// 边/角调整把手（锚点式：拖哪条边，对面边固定）
 struct ResizeHandles: View {
     @ObservedObject var wm: WindowManager
     let geo: GeometryProxy
-    @State private var lastTranslation: CGSize = .zero
+    @State private var startW: CGFloat = 0
+    @State private var startH: CGFloat = 0
+    @State private var started = false
 
     var body: some View {
         GeometryReader { g in
             let w = g.size.width
             let h = g.size.height
-            let edge: CGFloat = 16      // 边把手宽度
-            let corner: CGFloat = 26    // 角把手区域
+            let edge: CGFloat = 14
+            let corner: CGFloat = 24
 
             ZStack {
-                // ---- 四条边 ----
-                // 上边（竖拖调高）
-                Rectangle().fill(Color.clear).contentShape(Rectangle())
-                    .frame(width: w - corner * 2, height: edge)
-                    .position(x: w / 2, y: edge / 2)
-                    .gesture(resizeGesture { dw, dh in wm.floatingHeight += dh })
-                // 下边
-                Rectangle().fill(Color.clear).contentShape(Rectangle())
-                    .frame(width: w - corner * 2, height: edge)
-                    .position(x: w / 2, y: h - edge / 2)
-                    .gesture(resizeGesture { dw, dh in wm.floatingHeight += dh })
-                // 左边（横拖调宽）
-                Rectangle().fill(Color.clear).contentShape(Rectangle())
-                    .frame(width: edge, height: h - corner * 2)
-                    .position(x: edge / 2, y: h / 2)
-                    .gesture(resizeGesture { dw, dh in wm.floatingWidth += dw })
-                // 右边
-                Rectangle().fill(Color.clear).contentShape(Rectangle())
-                    .frame(width: edge, height: h - corner * 2)
-                    .position(x: w - edge / 2, y: h / 2)
-                    .gesture(resizeGesture { dw, dh in wm.floatingWidth += dw })
+                // 上边：向上拖=变大（anchor bottom）
+                handle(width: w - corner * 2, height: edge, x: w / 2, y: edge / 2, edgeCase: .top)
+                // 下边：向下拖=变大（anchor top）
+                handle(width: w - corner * 2, height: edge, x: w / 2, y: h - edge / 2, edgeCase: .bottom)
+                // 左边：向左拖=变大（anchor right）
+                handle(width: edge, height: h - corner * 2, x: edge / 2, y: h / 2, edgeCase: .left)
+                // 右边：向右拖=变大（anchor left）
+                handle(width: edge, height: h - corner * 2, x: w - edge / 2, y: h / 2, edgeCase: .right)
 
-                // ---- 四个角（斜拖同时调宽高）----
+                // 四角：斜拖同时调宽高
                 ForEach([Corner.topLeft, .topRight, .bottomLeft, .bottomRight], id: \.self) { c in
                     Rectangle().fill(Color.clear).contentShape(Rectangle())
                         .frame(width: corner, height: corner)
                         .position(cornerPos(c, w: w, h: h))
-                        .gesture(resizeGesture { dw, dh in
-                            wm.floatingWidth += dw
-                            wm.floatingHeight += dh
-                        })
+                        .gesture(cornerGesture(c))
                 }
             }
         }
     }
 
     enum Corner { case topLeft, topRight, bottomLeft, bottomRight }
+    enum EdgeCase { case top, bottom, left, right }
 
     private func cornerPos(_ c: Corner, w: CGFloat, h: CGFloat) -> CGPoint {
         switch c {
@@ -151,24 +152,68 @@ struct ResizeHandles: View {
         }
     }
 
-    private func resizeGesture(_ apply: @escaping (CGFloat, CGFloat) -> Void) -> some Gesture {
+    private func handle(width: CGFloat, height: CGFloat, x: CGFloat, y: CGFloat, edgeCase: EdgeCase) -> some View {
+        Rectangle().fill(Color.clear).contentShape(Rectangle())
+            .frame(width: width, height: height)
+            .position(x: x, y: y)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { v in
+                        if !started {
+                            startW = wm.floatingWidth
+                            startH = wm.floatingHeight
+                            started = true
+                        }
+                        switch edgeCase {
+                        case .right:
+                            wm.floatingWidth = startW + v.translation.width
+                        case .left:
+                            wm.floatingWidth = startW - v.translation.width
+                        case .bottom:
+                            wm.floatingHeight = startH + v.translation.height
+                        case .top:
+                            wm.floatingHeight = startH - v.translation.height
+                        }
+                        clamp()
+                    }
+                    .onEnded { _ in started = false }
+            )
+    }
+
+    private func cornerGesture(_ c: Corner) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { v in
-                // 增量 = 本次累计 translation - 上次累计 translation
-                let dx = (v.translation.width - lastTranslation.width) / 2
-                let dy = (v.translation.height - lastTranslation.height) / 2
-                lastTranslation = v.translation
-                apply(dx, dy)
+                if !started {
+                    startW = wm.floatingWidth
+                    startH = wm.floatingHeight
+                    started = true
+                }
+                var dw: CGFloat = 0
+                var dh: CGFloat = 0
+                switch c {
+                case .bottomRight:
+                    dw = v.translation.width; dh = v.translation.height
+                case .bottomLeft:
+                    dw = -v.translation.width; dh = v.translation.height
+                case .topRight:
+                    dw = v.translation.width; dh = -v.translation.height
+                case .topLeft:
+                    dw = -v.translation.width; dh = -v.translation.height
+                }
+                wm.floatingWidth = startW + dw
+                wm.floatingHeight = startH + dh
+                clamp()
             }
-            .onEnded { _ in
-                lastTranslation = .zero
-                wm.floatingWidth = min(geo.size.width - 40, max(70, wm.floatingWidth))
-                wm.floatingHeight = min(500, max(70, wm.floatingHeight))
-            }
+            .onEnded { _ in started = false }
+    }
+
+    private func clamp() {
+        wm.floatingWidth = min(geo.size.width - 40, max(70, wm.floatingWidth))
+        wm.floatingHeight = min(560, max(90, wm.floatingHeight))
     }
 }
 
-// MARK: - 全屏页面（含悬浮按钮组）
+// MARK: - 全屏页面
 
 struct FullscreenPage: View {
     let page: PageState
@@ -322,7 +367,7 @@ struct QuickSettingsView: View {
     }
 }
 
-// MARK: - 常驻 WebView（同一页面全屏/悬浮共用实例）
+// MARK: - 常驻 WebView
 
 struct PageWebView: UIViewRepresentable {
     let page: PageState
@@ -376,7 +421,7 @@ struct PageWebView: UIViewRepresentable {
         webView.currentBookmark = page.bookmark
         context.coordinator.edgeSwipeHome = edgeSwipeHome
         if desktopUA {
-            webView.customUserAgent = WebView.desktopUserAgent
+            webView.customUserAgent = PageWebView.desktopUserAgent
         }
 
         if edgeSwipeHome != nil {
@@ -394,12 +439,11 @@ struct PageWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        // 常驻实例：只更新动态属性，不重新 load（保留浏览状态）
         context.coordinator.edgeSwipeHome = edgeSwipeHome
         webView.currentBookmark = page.bookmark
         webView.pageZoom = zoom
 
-        let wantUA = desktopUA ? WebView.desktopUserAgent : nil
+        let wantUA = desktopUA ? PageWebView.desktopUserAgent : nil
         if webView.customUserAgent != wantUA {
             webView.customUserAgent = wantUA
             webView.reload()
@@ -412,17 +456,14 @@ struct PageWebView: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
+
+    static let desktopUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
 }
 
 extension WKWebView {
-    // 挂在 webView 上供 auth challenge 取书签配置
     var currentBookmark: Bookmark {
         get { objc_getAssociatedObject(self, &kBookmarkKey) as? Bookmark ?? Bookmark() }
         set { objc_setAssociatedObject(self, &kBookmarkKey, newValue, .OBJC_ASSOCIATION_RETAIN) }
     }
 }
 private var kBookmarkKey: UInt8 = 0
-
-struct WebView {
-    static let desktopUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
-}

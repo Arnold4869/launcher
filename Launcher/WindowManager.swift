@@ -1,19 +1,14 @@
 import SwiftUI
 
-/// 一个打开的页面（常驻 WebView，最多 2 个）
-final class PageState: Identifiable {
-    let id = UUID()
-    let bookmark: Bookmark
-    init(_ bm: Bookmark) { self.bookmark = bm }
-}
-
+/// 全屏/悬浮窗口状态管理（App 级）
 final class WindowManager: ObservableObject {
     @Published var pages: [PageState] = []
     @Published var fullscreenID: UUID?
     @Published var floatingID: UUID?
-    @Published var floatingPos: CGPoint = CGPoint(x: UIScreen.main.bounds.width - 90, y: 120)
-    @Published var floatingWidth: CGFloat = 110
-    @Published var floatingHeight: CGFloat = 130
+    @Published var floatingPos: CGPoint = CGPoint(x: UIScreen.main.bounds.width - 90, y: 160)
+    @Published var floatingWidth: CGFloat = 120
+    // 默认高宽比 = 屏幕比例
+    @Published var floatingHeight: CGFloat = 120 * (UIScreen.main.bounds.height / UIScreen.main.bounds.width)
 
     /// 打开书签：已在列表里 → 直接放大到全屏；否则新开（超过 2 个关掉悬浮那个）
     func open(_ bm: Bookmark) {
