@@ -1,4 +1,5 @@
 import SwiftUI
+import WebKit
 
 // MARK: - 分屏（上下两个独立 WebView + 可拖分隔条）
 

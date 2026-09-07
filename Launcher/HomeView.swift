@@ -119,48 +119,6 @@ struct HomeView: View {
     }
 }
 
-/// 分屏流程：同一 cover 内先选下半屏书签，选中后切分屏
-struct SplitFlowView: View {
-    let top: Bookmark
-    @ObservedObject var store: BookmarkStore
-    @State private var bottom: Bookmark?
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        if let bottom {
-            SplitViewScreen(top: top, bottom: bottom)
-        } else {
-            NavigationStack {
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
-                        ForEach(store.bookmarks.filter { $0.id != top.id }) { bm in
-                            Button {
-                                bottom = bm
-                            } label: {
-                                BookmarkCard(bm: bm)
-                            }
-                        }
-                    }
-                    .padding()
-                }
-                .navigationTitle("选下半屏书签")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("取消") { dismiss() }
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct SplitPair: Identifiable {
-    let id = UUID()
-    let top: Bookmark
-    let bottom: Bookmark
-}
-
 struct BookmarkCard: View {
     let bm: Bookmark
 
