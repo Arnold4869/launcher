@@ -1,35 +1,62 @@
 import SwiftUI
 
-/// 全屏/悬浮窗口状态管理（App 级）
+/// 一个打开的页面（常驻 WebView，最多 2 个）
+final class PageState: Identifiable {
+    let id = UUID()
+    let bookmark: Bookmark
+    init(_ bm: Bookmark) { self.bookmark = bm }
+}
+
 final class WindowManager: ObservableObject {
-    @Published var fullScreen: Bookmark?   // 当前全屏打开的书签
-    @Published var floating: Bookmark?     // 悬浮窗里的书签
+    @Published var pages: [PageState] = []
+    @Published var fullscreenID: UUID?
+    @Published var floatingID: UUID?
+    @Published var floatingPos: CGPoint = CGPoint(x: UIScreen.main.bounds.width - 70, y: 120)
+    @Published var floatingSize: CGFloat = 100
 
+    /// 打开书签：已在列表里 → 直接放大到全屏；否则新开（超过 2 个关掉悬浮那个）
     func open(_ bm: Bookmark) {
-        fullScreen = bm
+        if let page = pages.first(where: { $0.bookmark.id == bm.id }) {
+            fullscreenID = page.id
+            return
+        }
+        if pages.count >= 2 {
+            if let fid = floatingID {
+                pages.removeAll { $0.id == fid }
+            } else if let oldest = pages.first {
+                pages.removeAll { $0.id == oldest.id }
+            }
+        }
+        let page = PageState(bm)
+        pages.append(page)
+        fullscreenID = page.id
     }
 
-    /// 主页：真正关闭全屏页（悬浮窗保留不动）
+    /// 回主页：只关全屏层，页面状态保留
     func goHome() {
-        fullScreen = nil
+        fullscreenID = nil
     }
 
-    /// 当前全屏页缩成悬浮窗，回主页
-    func minimizeCurrentToFloating() {
-        guard let cur = fullScreen else { return }
-        floating = cur
-        fullScreen = nil
+    /// 当前全屏页缩成悬浮窗（唯一入口，手动触发）
+    func minimizeToFloating() {
+        guard let fs = fullscreenID else { return }
+        if let fid = floatingID {
+            pages.removeAll { $0.id == fid }   // 只允许一个悬浮窗
+        }
+        floatingID = fs
+        fullscreenID = nil
     }
 
-    /// 点悬浮窗：与当前全屏互换；主页时直接放大悬浮窗
-    func tapFloating() {
-        let f = floating
-        floating = fullScreen
-        fullScreen = f
+    /// 点悬浮窗：全屏 ↔ 悬浮互换（WebView 不重建，浏览状态保留）
+    func swap() {
+        let f = floatingID
+        floatingID = fullscreenID
+        fullscreenID = f
     }
 
-    func closeAll() {
-        fullScreen = nil
-        floating = nil
+    func closePage(_ id: UUID) {
+        pages.removeAll { $0.id == id }
+        if fullscreenID == id { fullscreenID = nil }
+        if floatingID == id { floatingID = nil }
     }
 }
