@@ -5,6 +5,7 @@ struct HomeView: View {
     @EnvironmentObject var wm: WindowManager
     // 本地 AppStorage：设置页改动实时刷新网格
     @AppStorage("gridColumns") private var gridColumnsCount = 2
+    @AppStorage("cardHeight") private var cardHeight: Double = 100
     @State private var editing: Bookmark?
     @State private var showAdd = false
     @State private var showImporter = false
@@ -32,7 +33,7 @@ struct HomeView: View {
                                 Button {
                                     wm.open(bm)
                                 } label: {
-                                    BookmarkCard(bm: bm)
+                                    BookmarkCard(bm: bm, cardHeight: CGFloat(cardHeight))
                                 }
                                 .contextMenu {
                                     Button {
@@ -123,6 +124,7 @@ struct HomeView: View {
 
 struct BookmarkCard: View {
     let bm: Bookmark
+    var cardHeight: CGFloat = 100   // 默认从 130 降到 100
 
     var body: some View {
         let colors = CardPalette.colors(for: bm.colorIndex)
@@ -131,7 +133,7 @@ struct BookmarkCard: View {
                 .fill(LinearGradient(colors: colors,
                                      startPoint: .topLeading,
                                      endPoint: .bottomTrailing))
-                .frame(height: 130)
+                .frame(height: cardHeight)
                 .shadow(color: colors[1].opacity(0.35), radius: 6, x: 0, y: 3)
             Text(bm.name)
                 .font(.title3.bold())
@@ -145,14 +147,19 @@ struct BookmarkCard: View {
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var cols = GridSettings.columns
+    @AppStorage("cardHeight") private var cardHeight: Double = 100
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     Stepper("每行显示 \(cols) 个", value: $cols, in: 1...5)
+                    VStack(alignment: .leading) {
+                        Text("卡片高度: \(Int(cardHeight))")
+                        Slider(value: $cardHeight, in: 60...200, step: 5)
+                    }
                 } footer: {
-                    Text("一行显示的书签卡片数量")
+                    Text("一行显示的书签卡片数量与卡片高度")
                 }
             }
             .navigationTitle("设置")
