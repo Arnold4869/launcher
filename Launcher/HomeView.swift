@@ -7,10 +7,7 @@ struct HomeView: View {
     @State private var showImporter = false
     @State private var importMessage: String?
     @State private var showImportAlert = false
-
-    private let columns = [
-        GridItem(.adaptive(minimum: 100), spacing: 16)
-    ]
+    @State private var showSettings = false
 
     var body: some View {
         NavigationStack {
@@ -26,7 +23,7 @@ struct HomeView: View {
                     }
                 } else {
                     ScrollView {
-                        LazyVGrid(columns: columns, spacing: 16) {
+                        LazyVGrid(columns: gridColumns, spacing: 14) {
                             ForEach(store.bookmarks) { bm in
                                 NavigationLink(value: bm) {
                                     BookmarkCard(bm: bm)
@@ -65,6 +62,11 @@ struct HomeView: View {
                         } label: {
                             Label("导入书签", systemImage: "square.and.arrow.down")
                         }
+                        Button {
+                            showSettings = true
+                        } label: {
+                            Label("设置", systemImage: "gearshape")
+                        }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -83,6 +85,9 @@ struct HomeView: View {
             .sheet(item: $editing) { bm in
                 BookmarkEditView(store: store, bookmark: bm)
             }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                 if case .success(let url) = result {
                     let scoped = url.startAccessingSecurityScopedResource()
@@ -99,25 +104,56 @@ struct HomeView: View {
             }
         }
     }
+
+    private var gridColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 14), count: GridSettings.columns)
+    }
 }
 
 struct BookmarkCard: View {
     let bm: Bookmark
 
     var body: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(Color(.systemGray6))
-                    .frame(width: 64, height: 64)
-                Text(bm.icon)
-                    .font(.system(size: 32))
-            }
+        let colors = CardPalette.colors(for: bm.colorIndex)
+        ZStack {
+            RoundedRectangle(cornerRadius: 22)
+                .fill(LinearGradient(colors: colors,
+                                     startPoint: .topLeading,
+                                     endPoint: .bottomTrailing))
+                .frame(height: 130)
+                .shadow(color: colors[1].opacity(0.35), radius: 6, x: 0, y: 3)
             Text(bm.name)
-                .font(.footnote)
-                .lineLimit(1)
-                .frame(width: 96)
+                .font(.title3.bold())
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 10)
         }
-        .foregroundStyle(.primary)
+    }
+}
+
+struct SettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var cols = GridSettings.columns
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Stepper("每行显示 \(cols) 个", value: $cols, in: 1...5)
+                } footer: {
+                    Text("一行显示的书签卡片数量")
+                }
+            }
+            .navigationTitle("设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") {
+                        GridSettings.columns = cols
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }

@@ -8,36 +8,33 @@ struct BookmarkEditView: View {
 
     @State private var name: String = ""
     @State private var urlString: String = "https://"
-    @State private var icon: String = "🌐"
+    @State private var colorIndex: Int = CardPalette.randomIndex()
     @State private var scale: Double = 1.0
     @State private var fontAdjust: Double = 0
     @State private var desktopUA: Bool = false
     @State private var authUser: String = ""
     @State private var authPass: String = ""
 
-    private let iconChoices = ["🌐", "📊", "💼", "🔧", "📺", "🎵", "📚", "⚙️", "🏠", "🚀", "💬", "🛒", "🎮", "📰"]
-
     var body: some View {
         NavigationStack {
             Form {
                 Section("基本信息") {
-                    HStack {
-                        Text("图标")
-                        Spacer()
-                        Text(icon).font(.system(size: 28))
+                    // 卡片颜色预览，点击换色
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 22)
+                            .fill(LinearGradient(colors: CardPalette.colors(for: colorIndex),
+                                                 startPoint: .topLeading,
+                                                 endPoint: .bottomTrailing))
+                            .frame(height: 100)
+                        Text(name.isEmpty ? "预览" : name)
+                            .font(.title3.bold())
+                            .foregroundStyle(.white)
                     }
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack {
-                            ForEach(iconChoices, id: \.self) { choice in
-                                Text(choice)
-                                    .font(.system(size: 26))
-                                    .padding(6)
-                                    .background(icon == choice ? Color.blue.opacity(0.2) : .clear)
-                                    .cornerRadius(8)
-                                    .onTapGesture { icon = choice }
-                            }
-                        }
-                    }
+                    .onTapGesture { colorIndex = CardPalette.randomIndex() }
+                    Text("点卡片换颜色")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
                     TextField("名称", text: $name)
                     TextField("网址", text: $urlString)
                         .keyboardType(.URL)
@@ -89,7 +86,7 @@ struct BookmarkEditView: View {
         guard let bm = bookmark else { return }
         name = bm.name
         urlString = bm.urlString
-        icon = bm.icon
+        colorIndex = bm.colorIndex
         scale = bm.scale
         fontAdjust = bm.fontAdjust
         desktopUA = bm.desktopUA
@@ -106,7 +103,8 @@ struct BookmarkEditView: View {
             id: bookmark?.id ?? UUID(),
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             urlString: url,
-            icon: icon,
+            icon: bookmark?.icon ?? "🌐",
+            colorIndex: colorIndex,
             scale: scale,
             fontAdjust: fontAdjust,
             desktopUA: desktopUA,

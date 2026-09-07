@@ -1,10 +1,42 @@
-import Foundation
+import SwiftUI
+
+/// 柔和渐变色板：卡片随机取色
+enum CardPalette {
+    static let gradients: [[Color]] = [
+        [Color(red: 0.55, green: 0.83, blue: 0.75), Color(red: 0.30, green: 0.66, blue: 0.60)],   // 薄荷绿
+        [Color(red: 0.60, green: 0.78, blue: 0.95), Color(red: 0.35, green: 0.55, blue: 0.85)],   // 天蓝
+        [Color(red: 0.98, green: 0.80, blue: 0.60), Color(red: 0.93, green: 0.60, blue: 0.40)],   // 暖橙
+        [Color(red: 0.80, green: 0.72, blue: 0.95), Color(red: 0.60, green: 0.50, blue: 0.85)],   // 淡紫
+        [Color(red: 0.97, green: 0.75, blue: 0.80), Color(red: 0.90, green: 0.55, blue: 0.62)],   // 粉红
+        [Color(red: 0.95, green: 0.90, blue: 0.65), Color(red: 0.88, green: 0.78, blue: 0.45)],   // 鹅黄
+        [Color(red: 0.65, green: 0.80, blue: 0.90), Color(red: 0.45, green: 0.65, blue: 0.82)],   // 雾蓝
+        [Color(red: 0.72, green: 0.88, blue: 0.65), Color(red: 0.52, green: 0.74, blue: 0.45)],   // 草绿
+        [Color(red: 0.85, green: 0.80, blue: 0.72), Color(red: 0.70, green: 0.62, blue: 0.52)],   // 米棕
+        [Color(red: 0.70, green: 0.68, blue: 0.92), Color(red: 0.52, green: 0.55, blue: 0.85)],   // 蓝紫
+        [Color(red: 0.95, green: 0.70, blue: 0.65), Color(red: 0.85, green: 0.50, blue: 0.48)],   // 珊瑚
+        [Color(red: 0.62, green: 0.85, blue: 0.85), Color(red: 0.40, green: 0.70, blue: 0.72)]    // 青碧
+    ]
+
+    static func colors(for index: Int) -> [Color] {
+        gradients[abs(index) % gradients.count]
+    }
+
+    static func randomIndex() -> Int {
+        Int.random(in: 0..<gradients.count)
+    }
+}
+
+/// 每行列数（全局设置，持久化到 UserDefaults）
+enum GridSettings {
+    @AppStorage("gridColumns") static var columns: Int = 2
+}
 
 struct Bookmark: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
     var name: String = ""
     var urlString: String = "https://"
-    var icon: String = "🌐"
+    var icon: String = "🌐"        // 旧字段保留兼容，界面已不用
+    var colorIndex: Int = CardPalette.randomIndex()
     var scale: Double = 1.0        // 页面缩放 0.5 - 3.0
     var fontAdjust: Double = 0     // 文字大小偏移百分比 -50 ~ +100
     var desktopUA: Bool = false    // 桌面 UA
