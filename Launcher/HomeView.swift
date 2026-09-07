@@ -8,8 +8,7 @@ struct HomeView: View {
     @State private var importMessage: String?
     @State private var showImportAlert = false
     @State private var showSettings = false
-    @State private var splitPickFor: Bookmark?   // 分屏：已选上位的书签
-    @State private var splitFullscreen = false
+    @State private var splitPair: SplitPair?   // 分屏流程（选择→展示都在同一 cover 内）
 
     var body: some View {
         NavigationStack {
@@ -37,8 +36,7 @@ struct HomeView: View {
                                         Label("编辑", systemImage: "pencil")
                                     }
                                     Button {
-                                        splitPickFor = bm
-                                        splitFullscreen = true
+                                        splitPair = SplitPair(top: bm, bottom: bm)
                                     } label: {
                                         Label("分屏打开", systemImage: "rectangle.split.2x1")
                                     }
@@ -96,10 +94,8 @@ struct HomeView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
-            .fullScreenCover(isPresented: $splitFullscreen) {
-                if let first = splitPickFor {
-                    SplitPickerView(first: first, store: store)
-                }
+            .fullScreenCover(item: $splitPair) { pair in
+                SplitFlowView(top: pair.top, store: store)
             }
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                 if case .success(let url) = result {
@@ -123,33 +119,36 @@ struct HomeView: View {
     }
 }
 
-/// 选第二个书签进分屏
-struct SplitPickerView: View {
-    let first: Bookmark
+/// 分屏流程：同一 cover 内先选下半屏书签，选中后切分屏
+struct SplitFlowView: View {
+    let top: Bookmark
     @ObservedObject var store: BookmarkStore
+    @State private var bottom: Bookmark?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
-                    ForEach(store.bookmarks.filter { $0.id != first.id }) { bm in
-                        Button {
-                            dismiss()
-                            NotificationCenter.default.post(
-                                name: .openSplit, object: SplitPair(top: first, bottom: bm))
-                        } label: {
-                            BookmarkCard(bm: bm)
+        if let bottom {
+            SplitViewScreen(top: top, bottom: bottom)
+        } else {
+            NavigationStack {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
+                        ForEach(store.bookmarks.filter { $0.id != top.id }) { bm in
+                            Button {
+                                bottom = bm
+                            } label: {
+                                BookmarkCard(bm: bm)
+                            }
                         }
                     }
+                    .padding()
                 }
-                .padding()
-            }
-            .navigationTitle("选下半屏书签")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
+                .navigationTitle("选下半屏书签")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("取消") { dismiss() }
+                    }
                 }
             }
         }
@@ -160,10 +159,6 @@ struct SplitPair: Identifiable {
     let id = UUID()
     let top: Bookmark
     let bottom: Bookmark
-}
-
-extension Notification.Name {
-    static let openSplit = Notification.Name("openSplit")
 }
 
 struct BookmarkCard: View {
