@@ -27,6 +27,7 @@ struct FloatingWindowView: View {
                                 onEdgeSwipeBack: {}, onEdgeSwipeBackEnabled: false,
                                 onTap: { wm.tapFloating() })
                             .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .allowsHitTesting(false)   // WebView 不接触摸，全部手势由外层接管
                     }
                 }
         }
@@ -34,19 +35,22 @@ struct FloatingWindowView: View {
         .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 18))
         .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
         .position(x: pos.x, y: pos.y)
-        .scaleEffect(dragging ? 1.05 : 1.0)
-        .onTapGesture {
-            wm.tapFloating()
-        }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 8)
+        // 统一手势：位移 < 8pt = 点击切换；否则拖动；双指捏合调大小
+        .gesture(
+            DragGesture(minimumDistance: 0)
                 .onChanged { v in
-                    dragging = true
-                    pos = v.location
+                    if abs(v.translation.width) > 4 || abs(v.translation.height) > 4 {
+                        dragging = true
+                    }
+                    if dragging { pos = v.location }
                 }
-                .onEnded { _ in
+                .onEnded { v in
                     dragging = false
-                    clampToEdges()
+                    if abs(v.translation.width) < 8 && abs(v.translation.height) < 8 {
+                        wm.tapFloating()
+                    } else {
+                        clampToEdges()
+                    }
                 }
         )
         .simultaneousGesture(
