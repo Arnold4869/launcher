@@ -5,7 +5,7 @@ import WebKit
 
 struct FloatingWindowView: View {
     @ObservedObject var wm: WindowManager
-    @AppStorage("floatingSize") private var savedSize: CGFloat = 90
+    @AppStorage("floatingSize") private var savedSize: Double = 90
     @State private var pos: CGPoint = CGPoint(x: UIScreen.main.bounds.width - 70, y: 110)
     @State private var dragging = false
     @State private var size: CGFloat = 90
@@ -55,13 +55,13 @@ struct FloatingWindowView: View {
                 }
                 .onEnded { _ in
                     pinchBase = size
-                    savedSize = size
+                    savedSize = Double(size)
                     clampToEdges()
                 }
         )
         .onAppear {
-            size = savedSize
-            pinchBase = savedSize
+            size = CGFloat(savedSize)
+            pinchBase = CGFloat(savedSize)
         }
         .onChange(of: wm.floating?.id) { _ in
             pos = CGPoint(x: UIScreen.main.bounds.width - 70, y: 110)
