@@ -6,6 +6,7 @@ struct HomeView: View {
     // 本地 AppStorage：设置页改动实时刷新网格
     @AppStorage("gridColumns") private var gridColumnsCount = 2
     @AppStorage("cardHeight") private var cardHeight: Double = 100
+    @AppStorage("cardFontScale") private var fontScale: Double = 1.0
     @State private var editing: Bookmark?
     @State private var showAdd = false
     @State private var showImporter = false
@@ -33,7 +34,7 @@ struct HomeView: View {
                                 Button {
                                     wm.open(bm)
                                 } label: {
-                                    BookmarkCard(bm: bm, cardHeight: CGFloat(cardHeight))
+                                    BookmarkCard(bm: bm, cardHeight: CGFloat(cardHeight), fontScale: CGFloat(fontScale))
                                 }
                                 .contextMenu {
                                     Button {
@@ -124,7 +125,8 @@ struct HomeView: View {
 
 struct BookmarkCard: View {
     let bm: Bookmark
-    var cardHeight: CGFloat = 100   // 默认从 130 降到 100
+    var cardHeight: CGFloat = 100
+    var fontScale: CGFloat = 1.0   // 字体缩放，设置页可调
 
     var body: some View {
         let colors = CardPalette.colors(for: bm.colorIndex)
@@ -138,7 +140,7 @@ struct BookmarkCard: View {
                 .frame(height: cardHeight)
                 .shadow(color: colors[1].opacity(0.35), radius: 6, x: 0, y: 3)
             Text(bm.name)
-                .font(.system(size: max(15, cardHeight * 0.22), weight: .bold))
+                .font(.system(size: max(11, cardHeight * 0.22 * fontScale), weight: .bold))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
@@ -152,6 +154,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var cols = GridSettings.columns
     @AppStorage("cardHeight") private var cardHeight: Double = 100
+    @AppStorage("cardFontScale") private var fontScale: Double = 1.0
 
     var body: some View {
         NavigationStack {
@@ -162,8 +165,12 @@ struct SettingsView: View {
                         Text("卡片高度: \(Int(cardHeight))")
                         Slider(value: $cardHeight, in: 60...200, step: 5)
                     }
+                    VStack(alignment: .leading) {
+                        Text("卡片字体大小: \(Int(fontScale * 100))%")
+                        Slider(value: $fontScale, in: 0.5...2.0, step: 0.05)
+                    }
                 } footer: {
-                    Text("一行显示的书签卡片数量与卡片高度")
+                    Text("一行显示的书签卡片数量、卡片高度与字体大小")
                 }
             }
             .navigationTitle("设置")
