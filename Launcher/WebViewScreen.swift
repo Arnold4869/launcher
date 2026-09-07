@@ -38,11 +38,13 @@ struct FloatingWindow: View {
         let w = wm.floatingWidth
         let h = wm.floatingHeight
         VStack(spacing: 0) {
-            // 标题栏（轻点=切换，拖=移动窗口）
+            // 标题栏：唯一拖动窗口的区域；点书签名=切换；×=关闭
             HStack(spacing: 4) {
                 Text(page.bookmark.name)
                     .font(.system(size: 9, weight: .semibold))
                     .lineLimit(1)
+                    .contentShape(Rectangle())
+                    .onTapGesture { wm.swap() }
                 Spacer()
                 Button {
                     wm.closePage(page.id)
@@ -50,14 +52,26 @@ struct FloatingWindow: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(.white)
+                        .padding(4)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .background(.black.opacity(0.5))
             .frame(width: w)
             .contentShape(Rectangle())
-            .onTapGesture { wm.swap() }
+            // 拖标题栏移动窗口
+            .gesture(
+                DragGesture(minimumDistance: 5)
+                    .onChanged { v in
+                        let halfW = wm.floatingWidth / 2 + 8
+                        let halfH = wm.floatingHeight / 2 + 20
+                        wm.floatingPos.x = max(halfW, min(geo.size.width - halfW, wm.floatingPos.x + v.translation.width / 8))
+                        wm.floatingPos.y = max(halfH, min(geo.size.height - halfH, wm.floatingPos.y + v.translation.height / 8))
+                    }
+            )
 
             // 页面预览（四周叠边/角把手，手势全在这层）
             PageWebView(page: page)
@@ -71,18 +85,6 @@ struct FloatingWindow: View {
         .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 4)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .position(x: wm.floatingPos.x, y: wm.floatingPos.y)
-        // 整窗拖动
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 10)
-                .onChanged { v in
-                    dragging = true
-                    let halfW = wm.floatingWidth / 2 + 8
-                    let halfH = wm.floatingHeight / 2 + 20
-                    wm.floatingPos.x = max(halfW, min(geo.size.width - halfW, wm.floatingPos.x + v.translation.width / 8))
-                    wm.floatingPos.y = max(halfH, min(geo.size.height - halfH, wm.floatingPos.y + v.translation.height / 8))
-                }
-                .onEnded { _ in dragging = false }
-        )
     }
 }
 
