@@ -5,6 +5,11 @@ final class WindowManager: ObservableObject {
     @Published var pages: [PageState] = []
     @Published var fullscreenID: UUID?
     @Published var floatingID: UUID?
+    /// 悬浮窗功能开关：代码保留，暂不显示
+    @Published var showFloating = false
+    /// 分屏状态（经悬浮钮「分屏」进入）
+    @Published var splitTop: Bookmark?
+    @Published var splitBottom: Bookmark?
     @Published var floatingPos: CGPoint = CGPoint(x: UIScreen.main.bounds.width - 90, y: 160)
     @Published var floatingWidth: CGFloat = 120
     // 默认高宽比 = 屏幕比例

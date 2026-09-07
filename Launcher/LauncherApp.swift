@@ -24,10 +24,18 @@ struct LauncherApp: App {
 
     private var pageLayer: some View {
         GeometryReader { geo in
-            ForEach(wm.pages) { page in
-                PageHost(page: page, wm: wm, geo: geo)
-                    .environmentObject(store)
-                    .zIndex(page.id == wm.floatingID ? 2 : 1)
+            ZStack {
+                ForEach(wm.pages) { page in
+                    PageHost(page: page, wm: wm, geo: geo)
+                        .environmentObject(store)
+                        .zIndex(page.id == wm.floatingID ? 2 : 1)
+                }
+
+                if let top = wm.splitTop, let bottom = wm.splitBottom {
+                    SplitViewScreen(top: top, bottom: bottom)
+                        .environmentObject(wm)
+                        .zIndex(3)
+                }
             }
         }
         .ignoresSafeArea()

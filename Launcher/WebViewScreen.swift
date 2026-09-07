@@ -13,7 +13,7 @@ struct PageHost: View {
         let isFullscreen = page.id == wm.fullscreenID
 
         Group {
-            if isFloating {
+            if isFloating && wm.showFloating {
                 FloatingWindow(page: page, wm: wm, geo: geo)
             } else if isFullscreen {
                 FullscreenPage(page: page, wm: wm)
@@ -232,6 +232,7 @@ struct FullscreenPage: View {
     @EnvironmentObject var store: BookmarkStore
 
     @State private var showQuickSettings = false
+    @State private var showSplitPicker = false
     @State private var expanded = false
     @State private var zoom: Double
     @State private var fontAdjust: Double
@@ -263,6 +264,11 @@ struct FullscreenPage: View {
                               zoom: $zoom, fontAdjust: $fontAdjust, desktopUA: $desktopUA)
                 .environmentObject(store)
         }
+        .sheet(isPresented: $showSplitPicker) {
+            SplitPickerView(top: page.bookmark)
+                .environmentObject(store)
+                .environmentObject(wm)
+        }
     }
 
     private var buttons: some View {
@@ -282,11 +288,11 @@ struct FullscreenPage: View {
                 .transition(.scale.combined(with: .opacity))
 
                 Button {
-                    collapse(); wm.minimizeToFloating()
+                    collapse(); showSplitPicker = true
                 } label: {
                     VStack(spacing: 2) {
-                        Image(systemName: "pip.enter").font(.system(size: 15, weight: .semibold))
-                        Text("悬浮").font(.system(size: 9))
+                        Image(systemName: "square.split.2x1").font(.system(size: 15, weight: .semibold))
+                        Text("分屏").font(.system(size: 9))
                     }
                     .foregroundStyle(.white)
                     .frame(width: 52, height: 52)

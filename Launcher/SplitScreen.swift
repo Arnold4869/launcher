@@ -10,6 +10,7 @@ struct SplitViewScreen: View {
 
     @State private var topFraction: Double = 0.5
     @State private var expanded = false
+    @EnvironmentObject var wm: WindowManager
     @AppStorage("splitFraction") private var savedFraction: Double = 0.5
 
     var body: some View {
@@ -47,7 +48,9 @@ struct SplitViewScreen: View {
             VStack(spacing: 12) {
                 if expanded {
                     Button {
-                        collapse(); savedFraction = topFraction; dismiss()
+                        collapse(); savedFraction = topFraction
+                        wm.splitTop = nil
+                        wm.splitBottom = nil
                     } label: {
                         VStack(spacing: 2) {
                             Image(systemName: "house").font(.system(size: 16, weight: .semibold))
@@ -161,6 +164,41 @@ struct SplitFlowView: View {
                     ToolbarItem(placement: .topBarLeading) {
                         Button("取消") { dismiss() }
                     }
+                }
+            }
+        }
+    }
+}
+
+/// 分屏选择器（从全屏页悬浮钮进入）：选下半屏书签 → 关全屏 → 弹分屏
+struct SplitPickerView: View {
+    let top: Bookmark
+    @EnvironmentObject var store: BookmarkStore
+    @EnvironmentObject var wm: WindowManager
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
+                    ForEach(store.bookmarks.filter { $0.id != top.id }) { bm in
+                        Button {
+                            wm.goHome()
+                            wm.splitTop = top
+                            wm.splitBottom = bm
+                            dismiss()
+                        } label: {
+                            BookmarkCard(bm: bm)
+                        }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("选下半屏书签")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("取消") { dismiss() }
                 }
             }
         }
