@@ -1,23 +1,26 @@
 import SwiftUI
 import WebKit
 
-// MARK: - 悬浮窗（可拖动，默认右上角）
+// MARK: - 悬浮窗（可拖动 + 双指捏合调大小）
 
 struct FloatingWindowView: View {
     @ObservedObject var wm: WindowManager
-    @State private var pos: CGPoint = CGPoint(x: UIScreen.main.bounds.width - 90, y: 120)
+    @AppStorage("floatingSize") private var savedSize: CGFloat = 90
+    @State private var pos: CGPoint = CGPoint(x: UIScreen.main.bounds.width - 70, y: 110)
     @State private var dragging = false
+    @State private var size: CGFloat = 90
+    @State private var pinchBase: CGFloat = 90
 
     var body: some View {
-        let size: CGFloat = 72
+        let s = size
         VStack(spacing: 2) {
             Text(wm.floating?.name ?? "?")
-                .font(.system(size: 8, weight: .semibold))
+                .font(.system(size: 9, weight: .semibold))
                 .lineLimit(1)
-                .frame(maxWidth: 80)
+                .frame(maxWidth: s + 10)
             RoundedRectangle(cornerRadius: 14)
                 .fill(Color(.systemGray6))
-                .frame(width: size, height: size)
+                .frame(width: s, height: s)
                 .overlay {
                     if let bm = wm.floating {
                         WebView(bookmark: bm, zoom: 0.4, fontAdjust: 0, desktopUA: bm.desktopUA,
@@ -26,14 +29,16 @@ struct FloatingWindowView: View {
                     }
                 }
         }
+        .padding(6)
+        .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 18))
         .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
         .position(x: pos.x, y: pos.y)
         .scaleEffect(dragging ? 1.05 : 1.0)
         .onTapGesture {
             wm.tapFloating()
         }
-        .gesture(
-            DragGesture()
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 8)
                 .onChanged { v in
                     dragging = true
                     pos = v.location
@@ -43,17 +48,32 @@ struct FloatingWindowView: View {
                     clampToEdges()
                 }
         )
+        .simultaneousGesture(
+            MagnificationGesture()
+                .onChanged { v in
+                    size = min(220, max(60, pinchBase * v))
+                }
+                .onEnded { _ in
+                    pinchBase = size
+                    savedSize = size
+                    clampToEdges()
+                }
+        )
+        .onAppear {
+            size = savedSize
+            pinchBase = savedSize
+        }
         .onChange(of: wm.floating?.id) { _ in
-            // 悬浮窗内容变了，重置位置到右上角
-            pos = CGPoint(x: UIScreen.main.bounds.width - 90, y: 120)
+            pos = CGPoint(x: UIScreen.main.bounds.width - 70, y: 110)
         }
     }
 
     private func clampToEdges() {
         let w = UIScreen.main.bounds.width
         let h = UIScreen.main.bounds.height
-        pos.x = min(max(pos.x, 60), w - 60)
-        pos.y = min(max(pos.y, 90), h - 90)
+        let half = size / 2 + 10
+        pos.x = min(max(pos.x, half), w - half)
+        pos.y = min(max(pos.y, half + 30), h - half)
     }
 }
 
@@ -158,7 +178,8 @@ struct SplitLabel: View {
     }
 }
 
-/// 全屏 cover 内的视图：WebView + 悬浮窗（悬浮窗跟随 cover，保证全屏层内也能看到/点击互换）
+// MARK: - 全屏视图（悬浮窗可点切换）
+
 struct WebFullScreenView: View {
     let bookmark: Bookmark
     @EnvironmentObject var store: BookmarkStore
@@ -178,39 +199,21 @@ struct WebFullScreenView: View {
     }
 
     var body: some View {
-        ZStack {
-            WebView(bookmark: bookmark, zoom: zoom, fontAdjust: fontAdjust, desktopUA: desktopUA,
-                    onEdgeSwipeBack: { wm.minimizeCurrentToFloating() })
-                .ignoresSafeArea()
-
-            // 悬浮窗跟随全屏层
-            if wm.floating != nil {
-                FloatingWindowView(wm: wm)
+        WebView(bookmark: bookmark, zoom: zoom, fontAdjust: fontAdjust, desktopUA: desktopUA,
+                onEdgeSwipeBack: { wm.minimizeCurrentToFloating() })
+            .ignoresSafeArea()
+            .overlay(alignment: .bottomTrailing) {
+                floatingButtons
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 34)
             }
-
-            // 悬浮按钮
-            VStack { Spacer()
-                HStack { Spacer()
-                    floatingButtons
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 34)
-                }
+            .sheet(isPresented: $showQuickSettings) {
+                QuickSettingsView(bookmarkID: bookmark.id,
+                                  zoom: $zoom, fontAdjust: $fontAdjust, desktopUA: $desktopUA)
+                    .environmentObject(store)
             }
-        }
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
-        .sheet(isPresented: $showQuickSettings) {
-            QuickSettingsView(bookmarkID: bookmark.id,
-                              zoom: $zoom, fontAdjust: $fontAdjust, desktopUA: $desktopUA)
-                .environmentObject(store)
-        }
-        .onChange(of: wm.fullScreen?.id) { _ in
-            // 悬浮互换时本页仍保留；全屏被关(nil)时 cover 自动关闭
-        }
     }
 
-    /// 悬浮窗被点后：fullScreen 变化会驱动 cover 内容切换。
-    /// 全屏变 nil 时 cover 需关闭 → 用 onChange 兼容两种情况。
     private var floatingButtons: some View {
         VStack(spacing: 12) {
             if expanded {
@@ -221,20 +224,6 @@ struct WebFullScreenView: View {
                         Image(systemName: "house")
                             .font(.system(size: 16, weight: .semibold))
                         Text("主页").font(.system(size: 9))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(width: 52, height: 52)
-                    .background(.black.opacity(0.55), in: Circle())
-                }
-                .transition(.scale.combined(with: .opacity))
-
-                Button {
-                    collapse(); wm.minimizeCurrentToFloating()
-                } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: "pip.enter")
-                            .font(.system(size: 15, weight: .semibold))
-                        Text("悬浮").font(.system(size: 9))
                     }
                     .foregroundStyle(.white)
                     .frame(width: 52, height: 52)

@@ -12,17 +12,21 @@ struct LauncherApp: App {
                     .environmentObject(store)
                     .environmentObject(wm)
 
-                // 悬浮窗（覆盖主页）
+                // 全屏层（ZStack 自绘，fullScreen 变化直接切换）
+                if let bm = wm.fullScreen {
+                    WebFullScreenView(bookmark: bm)
+                        .environmentObject(store)
+                        .environmentObject(wm)
+                        .transition(.opacity)
+                }
+
+                // 悬浮窗（最顶层，主页和全屏页都可见可点）
                 if wm.floating != nil {
                     FloatingWindowView(wm: wm)
                         .allowsHitTesting(true)
                 }
             }
-            .fullScreenCover(item: $wm.fullScreen) { bm in
-                WebFullScreenView(bookmark: bm)
-                    .environmentObject(store)
-                    .environmentObject(wm)
-            }
+            .animation(.easeInOut(duration: 0.2), value: wm.fullScreen?.id)
         }
     }
 }
