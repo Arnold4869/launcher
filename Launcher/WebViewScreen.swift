@@ -24,7 +24,8 @@ struct FloatingWindowView: View {
                 .overlay {
                     if let bm = wm.floating {
                         WebView(bookmark: bm, zoom: 0.4, fontAdjust: 0, desktopUA: bm.desktopUA,
-                                onEdgeSwipeBack: {}, onEdgeSwipeBackEnabled: false)
+                                onEdgeSwipeBack: {}, onEdgeSwipeBackEnabled: false,
+                                onTap: { wm.tapFloating() })
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
                 }
@@ -325,6 +326,7 @@ struct WebView: UIViewRepresentable {
     let desktopUA: Bool
     var onEdgeSwipeBack: () -> Void = {}
     var onEdgeSwipeBackEnabled: Bool = true
+    var onTap: (() -> Void)? = nil   // 整块点击（悬浮窗用，原生层捕获）
 
     final class Coordinator: NSObject, WKNavigationDelegate, UIGestureRecognizerDelegate {
         var parent: WebView
@@ -333,6 +335,10 @@ struct WebView: UIViewRepresentable {
 
         @objc func edgeSwiped() {
             parent.onEdgeSwipeBack()
+        }
+
+        @objc func tapped() {
+            parent.onTap?()
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
@@ -396,6 +402,15 @@ struct WebView: UIViewRepresentable {
             edgeGesture.edges = .left
             edgeGesture.delegate = context.coordinator
             webView.addGestureRecognizer(edgeGesture)
+        }
+
+        // 整块点击回调（悬浮窗切换用）
+        if onTap != nil {
+            let tap = UITapGestureRecognizer(
+                target: context.coordinator, action: #selector(Coordinator.tapped))
+            tap.delegate = context.coordinator
+            tap.cancelsTouchesInView = false
+            webView.addGestureRecognizer(tap)
         }
 
         if let url = URL(string: bookmark.urlString) {
