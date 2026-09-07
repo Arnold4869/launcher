@@ -9,6 +9,11 @@ final class WindowManager: ObservableObject {
         fullScreen = bm
     }
 
+    /// 主页：真正关闭全屏页（悬浮窗保留不动）
+    func goHome() {
+        fullScreen = nil
+    }
+
     /// 当前全屏页缩成悬浮窗，回主页
     func minimizeCurrentToFloating() {
         guard let cur = fullScreen else { return }

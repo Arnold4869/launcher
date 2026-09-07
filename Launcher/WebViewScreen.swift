@@ -26,6 +26,7 @@ struct FloatingWindowView: View {
                         WebView(bookmark: bm, zoom: 0.4, fontAdjust: 0, desktopUA: bm.desktopUA,
                                 onEdgeSwipeBack: {}, onEdgeSwipeBackEnabled: false,
                                 onTap: { wm.tapFloating() })
+                            .id(bm.id)   // bookmark 变了强制重建 WebView
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                             .allowsHitTesting(false)   // WebView 不接触摸，全部手势由外层接管
                     }
@@ -206,6 +207,7 @@ struct WebFullScreenView: View {
     var body: some View {
         WebView(bookmark: bookmark, zoom: zoom, fontAdjust: fontAdjust, desktopUA: desktopUA,
                 onEdgeSwipeBack: { wm.minimizeCurrentToFloating() })
+            .id(bookmark.id)   // 切换书签时强制重建 WebView
             .ignoresSafeArea()
             .overlay(alignment: .bottomTrailing) {
                 floatingButtons
@@ -223,12 +225,26 @@ struct WebFullScreenView: View {
         VStack(spacing: 12) {
             if expanded {
                 Button {
-                    collapse(); wm.minimizeCurrentToFloating()
+                    collapse(); wm.goHome()
                 } label: {
                     VStack(spacing: 2) {
                         Image(systemName: "house")
                             .font(.system(size: 16, weight: .semibold))
                         Text("主页").font(.system(size: 9))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(.black.opacity(0.55), in: Circle())
+                }
+                .transition(.scale.combined(with: .opacity))
+
+                Button {
+                    collapse(); wm.minimizeCurrentToFloating()
+                } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: "pip.enter")
+                            .font(.system(size: 15, weight: .semibold))
+                        Text("悬浮").font(.system(size: 9))
                     }
                     .foregroundStyle(.white)
                     .frame(width: 52, height: 52)
