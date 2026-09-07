@@ -75,24 +75,16 @@ struct FloatingWindow: View {
                     }
             )
 
-            // 页面区域：点中间=切换；边角=调整大小
+            // 页面区域：网页可直接操作（滑动/点击）；边角把手=调整大小
             ZStack {
-                // 真实缩略图：WebView 以全屏大小渲染再整体缩小
+                // 真实缩略图：WebView 以全屏大小渲染再整体缩小，触摸坐标由 transform 自动映射
                 PageWebView(page: page)
                     .frame(width: screen.width, height: screen.height)
                     .scaleEffect(x: scaleX, y: scaleY, anchor: .topLeading)
-                    .allowsHitTesting(false)
                     .frame(width: w, height: h, alignment: .topLeading)
                     .clipped()
 
-                // 中间区域点击 = 切换
-                Rectangle()
-                    .fill(Color.clear)
-                    .contentShape(Rectangle())
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .onTapGesture { wm.swap() }
-
-                // 边/角把手
+                // 边/角把手（只在边缘窄条，不挡中间）
                 ResizeHandles(wm: wm, geo: geo)
             }
             .frame(width: w, height: h)
@@ -110,6 +102,7 @@ struct ResizeHandles: View {
     let geo: GeometryProxy
     @State private var startW: CGFloat = 0
     @State private var startH: CGFloat = 0
+    @State private var startPos: CGPoint = .zero
     @State private var started = false
 
     var body: some View {
@@ -162,17 +155,24 @@ struct ResizeHandles: View {
                         if !started {
                             startW = wm.floatingWidth
                             startH = wm.floatingHeight
+                            startPos = wm.floatingPos
                             started = true
                         }
                         switch edgeCase {
                         case .right:
+                            // 左边固定：宽度变，中心右移一半
                             wm.floatingWidth = startW + v.translation.width
+                            wm.floatingPos.x = startPos.x + v.translation.width / 2
                         case .left:
+                            // 右边固定：向左拖=变大，中心左移一半
                             wm.floatingWidth = startW - v.translation.width
+                            wm.floatingPos.x = startPos.x - v.translation.width / 2
                         case .bottom:
                             wm.floatingHeight = startH + v.translation.height
+                            wm.floatingPos.y = startPos.y + v.translation.height / 2
                         case .top:
                             wm.floatingHeight = startH - v.translation.height
+                            wm.floatingPos.y = startPos.y - v.translation.height / 2
                         }
                         clamp()
                     }
@@ -186,22 +186,31 @@ struct ResizeHandles: View {
                 if !started {
                     startW = wm.floatingWidth
                     startH = wm.floatingHeight
+                    startPos = wm.floatingPos
                     started = true
                 }
                 var dw: CGFloat = 0
                 var dh: CGFloat = 0
+                var dx: CGFloat = 0
+                var dy: CGFloat = 0
                 switch c {
                 case .bottomRight:
                     dw = v.translation.width; dh = v.translation.height
+                    dx = v.translation.width / 2; dy = v.translation.height / 2
                 case .bottomLeft:
                     dw = -v.translation.width; dh = v.translation.height
+                    dx = v.translation.width / 2; dy = v.translation.height / 2
                 case .topRight:
                     dw = v.translation.width; dh = -v.translation.height
+                    dx = v.translation.width / 2; dy = v.translation.height / 2
                 case .topLeft:
                     dw = -v.translation.width; dh = -v.translation.height
+                    dx = v.translation.width / 2; dy = v.translation.height / 2
                 }
                 wm.floatingWidth = startW + dw
                 wm.floatingHeight = startH + dh
+                wm.floatingPos.x = startPos.x + dx
+                wm.floatingPos.y = startPos.y + dy
                 clamp()
             }
             .onEnded { _ in started = false }
