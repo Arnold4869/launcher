@@ -128,11 +128,13 @@ struct BookmarkCard: View {
 
     var body: some View {
         let colors = CardPalette.colors(for: bm.colorIndex)
+        // 深色渐变，白字对比清晰
         ZStack {
             RoundedRectangle(cornerRadius: 22)
                 .fill(LinearGradient(colors: colors,
                                      startPoint: .topLeading,
                                      endPoint: .bottomTrailing))
+                .brightness(-0.18)
                 .frame(height: cardHeight)
                 .shadow(color: colors[1].opacity(0.35), radius: 6, x: 0, y: 3)
             Text(bm.name)
@@ -141,7 +143,6 @@ struct BookmarkCard: View {
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .minimumScaleFactor(0.6)
-                .shadow(color: .black.opacity(0.25), radius: 2, x: 0, y: 1)
                 .padding(.horizontal, 10)
         }
     }
