@@ -109,7 +109,7 @@ struct SplitWebView: UIViewRepresentable {
         wv.navigationDelegate = context.coordinator
         wv.allowsBackForwardNavigationGestures = true
         wv.pageZoom = bm.scale
-        if bm.desktopUA { wv.customUserAgent = WebView.desktopUserAgent }
+        if bm.desktopUA { wv.customUserAgent = PageWebView.desktopUserAgent }
         if let url = URL(string: bm.urlString) { wv.load(URLRequest(url: url)) }
         return wv
     }
