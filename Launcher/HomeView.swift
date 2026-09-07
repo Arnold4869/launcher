@@ -4,6 +4,9 @@ struct HomeView: View {
     @StateObject private var store = BookmarkStore()
     @State private var editing: Bookmark?
     @State private var showAdd = false
+    @State private var showImporter = false
+    @State private var importMessage: String?
+    @State private var showImportAlert = false
 
     private let columns = [
         GridItem(.adaptive(minimum: 100), spacing: 16)
@@ -52,6 +55,21 @@ struct HomeView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        ShareLink(item: store.exportURL(),
+                                  preview: SharePreview("launcher-bookmarks.json")) {
+                            Label("导出书签", systemImage: "square.and.arrow.up")
+                        }
+                        Button {
+                            showImporter = true
+                        } label: {
+                            Label("导入书签", systemImage: "square.and.arrow.down")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showAdd = true
                     } label: {
@@ -64,6 +82,20 @@ struct HomeView: View {
             }
             .sheet(item: $editing) { bm in
                 BookmarkEditView(store: store, bookmark: bm)
+            }
+            .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
+                if case .success(let url) = result {
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    let n = store.importFrom(url)
+                    if scoped { url.stopAccessingSecurityScopedResource() }
+                    importMessage = n >= 0 ? "成功导入 \(n) 个书签" : "导入失败：文件格式不对"
+                    showImportAlert = true
+                }
+            }
+            .alert("导入结果", isPresented: $showImportAlert) {
+                Button("好", role: .cancel) {}
+            } message: {
+                Text(importMessage ?? "")
             }
         }
     }

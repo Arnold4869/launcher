@@ -37,4 +37,30 @@ final class BookmarkStore: ObservableObject {
         guard let data = try? JSONEncoder().encode(bookmarks) else { return }
         try? data.write(to: Self.fileURL, options: .atomic)
     }
+
+    // MARK: - 导出 / 导入
+
+    /// 导出当前书签到临时 json 文件（供分享面板使用），返回文件 URL
+    func exportURL() -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("launcher-bookmarks.json")
+        try? JSONEncoder().encode(bookmarks).write(to: url, options: .atomic)
+        return url
+    }
+
+    /// 从 json 导入书签，按 id 去重合并。返回新增数量，-1 = 解析失败
+    func importFrom(_ url: URL) -> Int {
+        guard let data = try? Data(contentsOf: url),
+              let imported = try? JSONDecoder().decode([Bookmark].self, from: data) else {
+            return -1
+        }
+        var existing = Set(bookmarks.map(\.id))
+        var added = 0
+        for bm in imported where !existing.contains(bm.id) {
+            bookmarks.append(bm)
+            existing.insert(bm.id)
+            added += 1
+        }
+        return added
+    }
 }
