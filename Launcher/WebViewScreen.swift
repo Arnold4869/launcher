@@ -7,6 +7,7 @@ struct WebViewScreen: View {
     @EnvironmentObject var store: BookmarkStore
 
     @State private var showQuickSettings = false
+    @State private var expanded = false
     @State private var zoom: Double
     @State private var fontAdjust: Double
     @State private var desktopUA: Bool
@@ -19,26 +20,48 @@ struct WebViewScreen: View {
     }
 
     var body: some View {
-        WebView(bookmark: bookmark, zoom: zoom, fontAdjust: fontAdjust, desktopUA: desktopUA)
+        WebView(bookmark: bookmark, zoom: zoom, fontAdjust: fontAdjust, desktopUA: desktopUA,
+                onEdgeSwipeBack: { dismiss() })
             .ignoresSafeArea()
             .navigationBarBackButtonHidden(true)
             .toolbar(.hidden, for: .navigationBar)
             .overlay(alignment: .bottomTrailing) {
-                // 悬浮按钮组：返回主页 + 快捷设置
+                // 单个悬浮钮：点击展开 返回主页 / 快捷设置
                 VStack(spacing: 12) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.backward")
-                            .font(.system(size: 18, weight: .semibold))
+                    if expanded {
+                        Button {
+                            collapse(); dismiss()
+                        } label: {
+                            VStack(spacing: 2) {
+                                Image(systemName: "house")
+                                    .font(.system(size: 16, weight: .semibold))
+                                Text("主页").font(.system(size: 9))
+                            }
                             .foregroundStyle(.white)
                             .frame(width: 52, height: 52)
                             .background(.black.opacity(0.55), in: Circle())
+                        }
+                        .transition(.scale.combined(with: .opacity))
+
+                        Button {
+                            collapse(); showQuickSettings = true
+                        } label: {
+                            VStack(spacing: 2) {
+                                Image(systemName: "slider.horizontal.3")
+                                    .font(.system(size: 16, weight: .semibold))
+                                Text("设置").font(.system(size: 9))
+                            }
+                            .foregroundStyle(.white)
+                            .frame(width: 52, height: 52)
+                            .background(.black.opacity(0.55), in: Circle())
+                        }
+                        .transition(.scale.combined(with: .opacity))
                     }
+
                     Button {
-                        showQuickSettings = true
+                        withAnimation(.spring(duration: 0.25)) { expanded.toggle() }
                     } label: {
-                        Image(systemName: "slider.horizontal.3")
+                        Image(systemName: expanded ? "xmark" : "ellipsis")
                             .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(width: 52, height: 52)
@@ -54,9 +77,13 @@ struct WebViewScreen: View {
                     .environmentObject(store)
             }
     }
+
+    private func collapse() {
+        withAnimation(.spring(duration: 0.25)) { expanded = false }
+    }
 }
 
-/// 页面内快捷设置：滑杆实时生效，「保存到书签」写回持久化
+/// 页面内快捷设置：调整直接写回书签永久生效
 struct QuickSettingsView: View {
     let bookmarkID: UUID
     @Binding var zoom: Double
@@ -68,7 +95,7 @@ struct QuickSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("页面属性 (实时生效)") {
+                Section("页面属性 (实时生效，自动保存)") {
                     VStack(alignment: .leading) {
                         Text("页面缩放: \(String(format: "%.1fx", zoom))")
                         Slider(value: $zoom, in: 0.5...3.0, step: 0.1)
@@ -80,14 +107,14 @@ struct QuickSettingsView: View {
                     Toggle("桌面版页面 (UA)", isOn: $desktopUA)
                 }
                 Section {
-                    Button("完成") { save() }
+                    Button("完成") { saveAndDismiss() }
                 }
             }
             .navigationTitle("快捷设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("关闭") { save(); dismiss() }
+                    Button("关闭") { saveAndDismiss() }
                 }
             }
             .onDisappear { save() }
@@ -95,13 +122,17 @@ struct QuickSettingsView: View {
         .presentationDetents([.medium])
     }
 
-    /// 调整直接写回书签永久生效
     private func save() {
         if let idx = store.bookmarks.firstIndex(where: { $0.id == bookmarkID }) {
             store.bookmarks[idx].scale = zoom
             store.bookmarks[idx].fontAdjust = fontAdjust
             store.bookmarks[idx].desktopUA = desktopUA
         }
+    }
+
+    private func saveAndDismiss() {
+        save()
+        dismiss()
     }
 }
 
@@ -110,11 +141,21 @@ struct WebView: UIViewRepresentable {
     let zoom: Double
     let fontAdjust: Double
     let desktopUA: Bool
+    var onEdgeSwipeBack: () -> Void = {}
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, UIGestureRecognizerDelegate {
         var parent: WebView
         var lastAppliedFontAdjust: Int = 0
         init(_ parent: WebView) { self.parent = parent }
+
+        @objc func edgeSwiped() {
+            parent.onEdgeSwipeBack()
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            true
+        }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             applyFontAdjust(webView)
@@ -132,7 +173,7 @@ struct WebView: UIViewRepresentable {
             decisionHandler(.allow)
         }
 
-        // HTTP Basic Auth / NTLM 自动应答
+        // HTTP Basic Auth / Digest 自动应答
         func webView(_ webView: WKWebView,
                      didReceive challenge: URLAuthenticationChallenge,
                      completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
@@ -165,6 +206,14 @@ struct WebView: UIViewRepresentable {
         if desktopUA {
             webView.customUserAgent = Self.desktopUserAgent
         }
+
+        // 左边缘右滑 → 返回主页
+        let edgeGesture = UIScreenEdgePanGestureRecognizer(
+            target: context.coordinator, action: #selector(Coordinator.edgeSwiped))
+        edgeGesture.edges = .left
+        edgeGesture.delegate = context.coordinator
+        webView.addGestureRecognizer(edgeGesture)
+
         if let url = URL(string: bookmark.urlString) {
             webView.load(URLRequest(url: url))
         }
