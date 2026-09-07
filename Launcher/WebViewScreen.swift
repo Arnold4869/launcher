@@ -24,25 +24,21 @@ struct WebViewScreen: View {
             .navigationBarBackButtonHidden(true)
             .toolbar(.hidden, for: .navigationBar)
             .overlay(alignment: .bottomTrailing) {
-                // 悬浮按钮组：展开后 返回 / 快捷设置
+                // 悬浮按钮组：返回主页 + 快捷设置
                 VStack(spacing: 12) {
-                    if showQuickSettings {
-                        Button {
-                            withAnimation(.spring(duration: 0.25)) { showQuickSettings = false }
-                            dismiss()
-                        } label: {
-                            Image(systemName: "chevron.backward")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(width: 46, height: 46)
-                                .background(.black.opacity(0.55), in: Circle())
-                        }
-                        .transition(.scale.combined(with: .opacity))
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.backward")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 52, height: 52)
+                            .background(.black.opacity(0.55), in: Circle())
                     }
                     Button {
-                        withAnimation(.spring(duration: 0.25)) { showQuickSettings.toggle() }
+                        showQuickSettings = true
                     } label: {
-                        Image(systemName: showQuickSettings ? "chevron.down" : "ellipsis")
+                        Image(systemName: "slider.horizontal.3")
                             .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(width: 52, height: 52)
