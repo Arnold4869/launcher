@@ -1,0 +1,29 @@
+name: Launcher
+options:
+  bundleIdPrefix: com.arnold
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    MARKETING_VERSION: 1.0.0
+    CURRENT_PROJECT_VERSION: 1
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGN_IDENTITY: ""
+targets:
+  Launcher:
+    type: application
+    platform: iOS
+    sources:
+      - path: .
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Launcher
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
