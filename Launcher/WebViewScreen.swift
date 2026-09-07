@@ -75,7 +75,7 @@ struct FloatingWindow: View {
                     }
             )
 
-            // 页面区域：网页可直接操作（滑动/点击）；边角把手=调整大小
+            // 页面区域：网页可直接操作（滑动/点击）；边角把手=调整大小；双击空白=切换
             ZStack {
                 // 真实缩略图：WebView 以全屏大小渲染再整体缩小，触摸坐标由 transform 自动映射
                 PageWebView(page: page)
@@ -88,6 +88,7 @@ struct FloatingWindow: View {
                 ResizeHandles(wm: wm, geo: geo)
             }
             .frame(width: w, height: h)
+            .onTapGesture(count: 2) { wm.swap() }   // 双击页面区 = 切换（单击留给网页）
         }
         .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 4)
@@ -164,15 +165,16 @@ struct ResizeHandles: View {
                             wm.floatingWidth = startW + v.translation.width
                             wm.floatingPos.x = startPos.x + v.translation.width / 2
                         case .left:
-                            // 右边固定：向左拖=变大，中心左移一半
+                            // 右边固定：向左拖=向左扩大，中心右移一半
                             wm.floatingWidth = startW - v.translation.width
-                            wm.floatingPos.x = startPos.x - v.translation.width / 2
+                            wm.floatingPos.x = startPos.x + v.translation.width / 2
                         case .bottom:
                             wm.floatingHeight = startH + v.translation.height
                             wm.floatingPos.y = startPos.y + v.translation.height / 2
                         case .top:
+                            // 下边固定：向上拖=向上扩大，中心下移一半
                             wm.floatingHeight = startH - v.translation.height
-                            wm.floatingPos.y = startPos.y - v.translation.height / 2
+                            wm.floatingPos.y = startPos.y + v.translation.height / 2
                         }
                         clamp()
                     }
