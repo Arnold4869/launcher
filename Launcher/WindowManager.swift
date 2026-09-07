@@ -11,8 +11,9 @@ final class WindowManager: ObservableObject {
     @Published var pages: [PageState] = []
     @Published var fullscreenID: UUID?
     @Published var floatingID: UUID?
-    @Published var floatingPos: CGPoint = CGPoint(x: UIScreen.main.bounds.width - 70, y: 120)
-    @Published var floatingSize: CGFloat = 100
+    @Published var floatingPos: CGPoint = CGPoint(x: UIScreen.main.bounds.width - 90, y: 120)
+    @Published var floatingWidth: CGFloat = 110
+    @Published var floatingHeight: CGFloat = 130
 
     /// 打开书签：已在列表里 → 直接放大到全屏；否则新开（超过 2 个关掉悬浮那个）
     func open(_ bm: Bookmark) {

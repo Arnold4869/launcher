@@ -35,9 +35,10 @@ struct FloatingWindow: View {
     @State private var dragging = false
 
     var body: some View {
-        let s = wm.floatingSize
+        let w = wm.floatingWidth
+        let h = wm.floatingHeight
         VStack(spacing: 0) {
-            // 标题栏
+            // 标题栏（轻点=切换，拖=移动窗口）
             HStack(spacing: 4) {
                 Text(page.bookmark.name)
                     .font(.system(size: 9, weight: .semibold))
@@ -54,27 +55,30 @@ struct FloatingWindow: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .background(.black.opacity(0.5))
+            .frame(width: w)
+            .contentShape(Rectangle())
+            .onTapGesture { wm.swap() }
 
             // 页面预览
             PageWebView(page: page)
-                .frame(width: s, height: s)
+                .frame(width: w, height: h)
+                .allowsHitTesting(false)
 
-            // 底部拉条：上下拖调大小
+            // 右下角调整把手：斜向拖 = 同时调宽高
             Rectangle()
                 .fill(Color.black.opacity(0.5))
-                .frame(height: 16)
+                .frame(width: w, height: 18)
                 .contentShape(Rectangle())
                 .overlay {
-                    Rectangle()
-                        .fill(.white.opacity(0.9))
-                        .frame(width: 36, height: 4)
-                        .cornerRadius(2)
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.white.opacity(0.9))
                 }
                 .gesture(
                     DragGesture()
                         .onChanged { v in
-                            // 往上拖 = 变大
-                            wm.floatingSize = min(300, max(70, wm.floatingSize - v.translation.height / 3))
+                            wm.floatingWidth = min(geo.size.width - 40, max(70, wm.floatingWidth + v.translation.width / 2))
+                            wm.floatingHeight = min(500, max(70, wm.floatingHeight + v.translation.height / 2))
                         }
                 )
         }
@@ -82,21 +86,18 @@ struct FloatingWindow: View {
         .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 4)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .position(x: wm.floatingPos.x, y: wm.floatingPos.y)
-        // 整窗拖动
-        .gesture(
-            DragGesture(minimumDistance: 6)
+        // 整窗拖动（拉把手时除外，因为把手手势优先吃掉拖动）
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 10)
                 .onChanged { v in
                     dragging = true
-                    wm.floatingPos.x = max(60, min(geo.size.width - 60, wm.floatingPos.x + v.translation.width / 8))
-                    wm.floatingPos.y = max(80, min(geo.size.height - 80, wm.floatingPos.y + v.translation.height / 8))
+                    let halfW = wm.floatingWidth / 2 + 8
+                    let halfH = wm.floatingHeight / 2 + 20
+                    wm.floatingPos.x = max(halfW, min(geo.size.width - halfW, wm.floatingPos.x + v.translation.width / 8))
+                    wm.floatingPos.y = max(halfH, min(geo.size.height - halfH, wm.floatingPos.y + v.translation.height / 8))
                 }
                 .onEnded { _ in dragging = false }
         )
-        // 轻点标题栏 = 切换（页面区被 WebView 占用，标题栏是明确的点击目标）
-        .onTapGesture { location in
-            // 只有标题栏区域点击才算切换，页面区留给长按
-            if location.y < 20 { wm.swap() }
-        }
     }
 }
 
