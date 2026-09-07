@@ -7,9 +7,22 @@ struct WebViewScreen: View {
 
     var body: some View {
         WebView(bookmark: bookmark)
-            .ignoresSafeArea(edges: .bottom)
-            .navigationTitle(bookmark.name)
-            .navigationBarTitleDisplayMode(.inline)
+            .ignoresSafeArea()
+            .navigationBarBackButtonHidden(true)
+            .toolbar(.hidden, for: .navigationBar)
+            .overlay(alignment: .bottomTrailing) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.backward")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 52, height: 52)
+                        .background(.black.opacity(0.55), in: Circle())
+                }
+                .padding(.trailing, 20)
+                .padding(.bottom, 34)
+            }
     }
 }
 
