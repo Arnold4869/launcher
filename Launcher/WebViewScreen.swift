@@ -115,6 +115,7 @@ struct FullscreenPage: View {
 
     init(page: PageState, wm: WindowManager) {
         self.page = page
+        _wm = ObservedObject(wrappedValue: wm)
         _zoom = State(initialValue: page.bookmark.scale)
         _fontAdjust = State(initialValue: page.bookmark.fontAdjust)
         _desktopUA = State(initialValue: page.bookmark.desktopUA)
