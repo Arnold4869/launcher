@@ -16,7 +16,7 @@ struct SplitViewScreen: View {
         GeometryReader { geo in
             VStack(spacing: 0) {
                 WebView(bookmark: top, zoom: top.scale, fontAdjust: top.fontAdjust,
-                        desktopUA: top.desktopUA, onEdgeSwipeBack: {})
+                        desktopUA: top.desktopUA, onEdgeSwipeBack: {}, onEdgeSwipeBackEnabled: false)
                     .frame(height: geo.size.height * topFraction)
                     .overlay(alignment: .topLeading) {
                         SplitLabel(bm: top)
@@ -41,7 +41,7 @@ struct SplitViewScreen: View {
                     )
 
                 WebView(bookmark: bottom, zoom: bottom.scale, fontAdjust: bottom.fontAdjust,
-                        desktopUA: bottom.desktopUA, onEdgeSwipeBack: {})
+                        desktopUA: bottom.desktopUA, onEdgeSwipeBack: {}, onEdgeSwipeBackEnabled: false)
                     .overlay(alignment: .topLeading) {
                         SplitLabel(bm: bottom)
                     }
@@ -248,6 +248,7 @@ struct WebView: UIViewRepresentable {
     let fontAdjust: Double
     let desktopUA: Bool
     var onEdgeSwipeBack: () -> Void = {}
+    var onEdgeSwipeBackEnabled: Bool = true
 
     final class Coordinator: NSObject, WKNavigationDelegate, UIGestureRecognizerDelegate {
         var parent: WebView
@@ -313,8 +314,8 @@ struct WebView: UIViewRepresentable {
             webView.customUserAgent = Self.desktopUserAgent
         }
 
-        // 左边缘右滑 → 返回主页（仅全屏模式）
-        if onEdgeSwipeBack != {} {
+        // 左边缘右滑 → 返回主页（仅全屏模式，分屏时传空回调）
+        if onEdgeSwipeBackEnabled {
             let edgeGesture = UIScreenEdgePanGestureRecognizer(
                 target: context.coordinator, action: #selector(Coordinator.edgeSwiped))
             edgeGesture.edges = .left
