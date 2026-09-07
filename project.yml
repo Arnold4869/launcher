@@ -10,6 +10,7 @@ settings:
     CODE_SIGN_STYLE: Automatic
     CODE_SIGNING_ALLOWED: "NO"
     CODE_SIGN_IDENTITY: ""
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 targets:
   Launcher:
     type: application

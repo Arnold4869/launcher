@@ -12,6 +12,8 @@ struct BookmarkEditView: View {
     @State private var scale: Double = 1.0
     @State private var fontAdjust: Double = 0
     @State private var desktopUA: Bool = false
+    @State private var authUser: String = ""
+    @State private var authPass: String = ""
 
     private let iconChoices = ["🌐", "📊", "💼", "🔧", "📺", "🎵", "📚", "⚙️", "🏠", "🚀", "💬", "🛒", "🎮", "📰"]
 
@@ -54,6 +56,19 @@ struct BookmarkEditView: View {
                     }
                     Toggle("桌面版页面 (UA)", isOn: $desktopUA)
                 }
+
+                Section {
+                    TextField("用户名", text: $authUser)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                    SecureField("密码", text: $authPass)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                } header: {
+                    Text("HTTP Basic Auth (可选)")
+                } footer: {
+                    Text("填写后自动登录，无需弹窗输密码")
+                }
             }
             .navigationTitle(bookmark == nil ? "添加书签" : "编辑书签")
             .navigationBarTitleDisplayMode(.inline)
@@ -78,6 +93,8 @@ struct BookmarkEditView: View {
         scale = bm.scale
         fontAdjust = bm.fontAdjust
         desktopUA = bm.desktopUA
+        authUser = bm.basicAuthUser
+        authPass = bm.basicAuthPass
     }
 
     private func save() {
@@ -92,7 +109,9 @@ struct BookmarkEditView: View {
             icon: icon,
             scale: scale,
             fontAdjust: fontAdjust,
-            desktopUA: desktopUA
+            desktopUA: desktopUA,
+            basicAuthUser: authUser,
+            basicAuthPass: authPass
         )
         if let idx = store.bookmarks.firstIndex(where: { $0.id == bm.id }) {
             store.bookmarks[idx] = bm

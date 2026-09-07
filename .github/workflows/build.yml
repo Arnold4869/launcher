@@ -12,6 +12,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Compute version
+        id: ver
+        run: |
+          # 每次 commit 自动递增: 1.0.<commit 数>, build 号 = run 号
+          COMMITS=$(git rev-list --count HEAD)
+          echo "marketing=1.0.${COMMITS}" >> $GITHUB_OUTPUT
+          echo "build=${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
+          echo "Version: 1.0.${COMMITS} (build ${GITHUB_RUN_NUMBER})"
+
       - name: Install XcodeGen
         run: brew install xcodegen
 
@@ -26,6 +35,8 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
+            MARKETING_VERSION=${{ steps.ver.outputs.marketing }} \
+            CURRENT_PROJECT_VERSION=${{ steps.ver.outputs.build }} \
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
             build
 
@@ -33,10 +44,10 @@ jobs:
           cp -r "build/Build/Products/Release-iphoneos/Launcher.app" Payload/
           zip -qr Launcher-unsigned.ipa Payload
           mkdir -p output
-          mv Launcher-unsigned.ipa output/
+          mv Launcher-unsigned.ipa "output/Launcher-${{ steps.ver.outputs.marketing }}.ipa"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: Launcher-unsigned-ipa
-          path: output/Launcher-unsigned.ipa
+          path: output/*.ipa

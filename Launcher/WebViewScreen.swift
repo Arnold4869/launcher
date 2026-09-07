@@ -32,6 +32,23 @@ struct WebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             decisionHandler(.allow)
         }
+
+        // HTTP Basic Auth / NTLM 自动应答
+        func webView(_ webView: WKWebView,
+                     didReceive challenge: URLAuthenticationChallenge,
+                     completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+            let method = challenge.protectionSpace.authenticationMethod
+            let bm = parent.bookmark
+            if !bm.basicAuthUser.isEmpty,
+               method == NSURLAuthenticationMethodHTTPBasic || method == NSURLAuthenticationMethodHTTPDigest {
+                let cred = URLCredential(user: bm.basicAuthUser,
+                                         password: bm.basicAuthPass,
+                                         persistence: .forSession)
+                completionHandler(.useCredential, cred)
+            } else {
+                completionHandler(.performDefaultHandling, nil)
+            }
+        }
     }
 
     static let desktopUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
