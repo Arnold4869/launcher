@@ -59,34 +59,19 @@ struct FloatingWindow: View {
             .contentShape(Rectangle())
             .onTapGesture { wm.swap() }
 
-            // 页面预览
+            // 页面预览（四周叠边/角把手，手势全在这层）
             PageWebView(page: page)
                 .frame(width: w, height: h)
                 .allowsHitTesting(false)
-
-            // 右下角调整把手：斜向拖 = 同时调宽高
-            Rectangle()
-                .fill(Color.black.opacity(0.5))
-                .frame(width: w, height: 18)
-                .contentShape(Rectangle())
                 .overlay {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.white.opacity(0.9))
+                    ResizeHandles(wm: wm, geo: geo)
                 }
-                .gesture(
-                    DragGesture()
-                        .onChanged { v in
-                            wm.floatingWidth = min(geo.size.width - 40, max(70, wm.floatingWidth + v.translation.width / 2))
-                            wm.floatingHeight = min(500, max(70, wm.floatingHeight + v.translation.height / 2))
-                        }
-                )
         }
         .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
         .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 4)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .position(x: wm.floatingPos.x, y: wm.floatingPos.y)
-        // 整窗拖动（拉把手时除外，因为把手手势优先吃掉拖动）
+        // 整窗拖动
         .simultaneousGesture(
             DragGesture(minimumDistance: 10)
                 .onChanged { v in
@@ -98,6 +83,86 @@ struct FloatingWindow: View {
                 }
                 .onEnded { _ in dragging = false }
         )
+    }
+}
+
+/// 四条边 + 四个角的调整把手
+/// 边把手：拖上下边调高、拖左右边调宽
+/// 角把手：斜向拖同时调宽高
+struct ResizeHandles: View {
+    @ObservedObject var wm: WindowManager
+    let geo: GeometryProxy
+    @State private var lastTranslation: CGSize = .zero
+
+    var body: some View {
+        GeometryReader { g in
+            let w = g.size.width
+            let h = g.size.height
+            let edge: CGFloat = 16      // 边把手宽度
+            let corner: CGFloat = 26    // 角把手区域
+
+            ZStack {
+                // ---- 四条边 ----
+                // 上边（竖拖调高）
+                Rectangle().fill(Color.clear).contentShape(Rectangle())
+                    .frame(width: w - corner * 2, height: edge)
+                    .position(x: w / 2, y: edge / 2)
+                    .gesture(resizeGesture { dw, dh in wm.floatingHeight += dh })
+                // 下边
+                Rectangle().fill(Color.clear).contentShape(Rectangle())
+                    .frame(width: w - corner * 2, height: edge)
+                    .position(x: w / 2, y: h - edge / 2)
+                    .gesture(resizeGesture { dw, dh in wm.floatingHeight += dh })
+                // 左边（横拖调宽）
+                Rectangle().fill(Color.clear).contentShape(Rectangle())
+                    .frame(width: edge, height: h - corner * 2)
+                    .position(x: edge / 2, y: h / 2)
+                    .gesture(resizeGesture { dw, dh in wm.floatingWidth += dw })
+                // 右边
+                Rectangle().fill(Color.clear).contentShape(Rectangle())
+                    .frame(width: edge, height: h - corner * 2)
+                    .position(x: w - edge / 2, y: h / 2)
+                    .gesture(resizeGesture { dw, dh in wm.floatingWidth += dw })
+
+                // ---- 四个角（斜拖同时调宽高）----
+                ForEach([Corner.topLeft, .topRight, .bottomLeft, .bottomRight], id: \.self) { c in
+                    Rectangle().fill(Color.clear).contentShape(Rectangle())
+                        .frame(width: corner, height: corner)
+                        .position(cornerPos(c, w: w, h: h))
+                        .gesture(resizeGesture { dw, dh in
+                            wm.floatingWidth += dw
+                            wm.floatingHeight += dh
+                        })
+                }
+            }
+        }
+    }
+
+    enum Corner { case topLeft, topRight, bottomLeft, bottomRight }
+
+    private func cornerPos(_ c: Corner, w: CGFloat, h: CGFloat) -> CGPoint {
+        switch c {
+        case .topLeft: return CGPoint(x: 0, y: 0)
+        case .topRight: return CGPoint(x: w, y: 0)
+        case .bottomLeft: return CGPoint(x: 0, y: h)
+        case .bottomRight: return CGPoint(x: w, y: h)
+        }
+    }
+
+    private func resizeGesture(_ apply: @escaping (CGFloat, CGFloat) -> Void) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { v in
+                // 增量 = 本次累计 translation - 上次累计 translation
+                let dx = (v.translation.width - lastTranslation.width) / 2
+                let dy = (v.translation.height - lastTranslation.height) / 2
+                lastTranslation = v.translation
+                apply(dx, dy)
+            }
+            .onEnded { _ in
+                lastTranslation = .zero
+                wm.floatingWidth = min(geo.size.width - 40, max(70, wm.floatingWidth))
+                wm.floatingHeight = min(500, max(70, wm.floatingHeight))
+            }
     }
 }
 
