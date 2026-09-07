@@ -4,38 +4,127 @@ import WebKit
 struct WebViewScreen: View {
     let bookmark: Bookmark
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var store: BookmarkStore
+
+    @State private var showQuickSettings = false
+    @State private var zoom: Double
+    @State private var fontAdjust: Double
+    @State private var desktopUA: Bool
+
+    init(bookmark: Bookmark) {
+        self.bookmark = bookmark
+        _zoom = State(initialValue: bookmark.scale)
+        _fontAdjust = State(initialValue: bookmark.fontAdjust)
+        _desktopUA = State(initialValue: bookmark.desktopUA)
+    }
 
     var body: some View {
-        WebView(bookmark: bookmark)
+        WebView(bookmark: bookmark, zoom: zoom, fontAdjust: fontAdjust, desktopUA: desktopUA)
             .ignoresSafeArea()
             .navigationBarBackButtonHidden(true)
             .toolbar(.hidden, for: .navigationBar)
             .overlay(alignment: .bottomTrailing) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.backward")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 52, height: 52)
-                        .background(.black.opacity(0.55), in: Circle())
+                // 悬浮按钮组：展开后 返回 / 快捷设置
+                VStack(spacing: 12) {
+                    if showQuickSettings {
+                        Button {
+                            withAnimation(.spring(duration: 0.25)) { showQuickSettings = false }
+                            dismiss()
+                        } label: {
+                            Image(systemName: "chevron.backward")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 46, height: 46)
+                                .background(.black.opacity(0.55), in: Circle())
+                        }
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                    Button {
+                        withAnimation(.spring(duration: 0.25)) { showQuickSettings.toggle() }
+                    } label: {
+                        Image(systemName: showQuickSettings ? "chevron.down" : "ellipsis")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 52, height: 52)
+                            .background(.black.opacity(0.55), in: Circle())
+                    }
                 }
                 .padding(.trailing, 20)
                 .padding(.bottom, 34)
             }
+            .sheet(isPresented: $showQuickSettings) {
+                QuickSettingsView(bookmarkID: bookmark.id,
+                                  zoom: $zoom, fontAdjust: $fontAdjust, desktopUA: $desktopUA)
+                    .environmentObject(store)
+            }
+    }
+}
+
+/// 页面内快捷设置：滑杆实时生效，「保存到书签」写回持久化
+struct QuickSettingsView: View {
+    let bookmarkID: UUID
+    @Binding var zoom: Double
+    @Binding var fontAdjust: Double
+    @Binding var desktopUA: Bool
+    @EnvironmentObject var store: BookmarkStore
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("页面属性 (实时生效)") {
+                    VStack(alignment: .leading) {
+                        Text("页面缩放: \(String(format: "%.1fx", zoom))")
+                        Slider(value: $zoom, in: 0.5...3.0, step: 0.1)
+                    }
+                    VStack(alignment: .leading) {
+                        Text("文字大小: \(fontAdjust >= 0 ? "+" : "")\(Int(fontAdjust))%")
+                        Slider(value: $fontAdjust, in: -50...100, step: 5)
+                    }
+                    Toggle("桌面版页面 (UA)", isOn: $desktopUA)
+                }
+                Section {
+                    Button("保存到书签") {
+                        if let idx = store.bookmarks.firstIndex(where: { $0.id == bookmarkID }) {
+                            store.bookmarks[idx].scale = zoom
+                            store.bookmarks[idx].fontAdjust = fontAdjust
+                            store.bookmarks[idx].desktopUA = desktopUA
+                        }
+                        dismiss()
+                    }
+                } footer: {
+                    Text("不保存则仅本次浏览生效")
+                }
+            }
+            .navigationTitle("快捷设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("关闭") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 
 struct WebView: UIViewRepresentable {
     let bookmark: Bookmark
+    let zoom: Double
+    let fontAdjust: Double
+    let desktopUA: Bool
 
-    class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate {
         var parent: WebView
+        var lastAppliedFontAdjust: Int = 0
         init(_ parent: WebView) { self.parent = parent }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            // 文字大小偏移：每次页面加载后注入
-            let adjust = Int(parent.bookmark.fontAdjust)
+            applyFontAdjust(webView)
+        }
+
+        private func applyFontAdjust(_ webView: WKWebView) {
+            let adjust = parent.fontAdjust
             if adjust != 0 {
                 let js = "document.documentElement.style.webkitTextSizeAdjust='\(100 + adjust)%';"
                 webView.evaluateJavaScript(js, completionHandler: nil)
@@ -68,7 +157,6 @@ struct WebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
-        // 持久化数据存储：cookie / localStorage 长期保存到磁盘
         config.websiteDataStore = WKWebsiteDataStore.default()
 
         let webView = WKWebView(frame: .zero, configuration: config)
@@ -76,23 +164,43 @@ struct WebView: UIViewRepresentable {
         webView.allowsBackForwardNavigationGestures = true
         webView.scrollView.minimumZoomScale = 0.3
         webView.scrollView.maximumZoomScale = 5.0
-
-        // 页面缩放（iOS 14+）
-        webView.pageZoom = bookmark.scale
-
-        if bookmark.desktopUA {
+        webView.pageZoom = zoom
+        if desktopUA {
             webView.customUserAgent = Self.desktopUserAgent
         }
-
         if let url = URL(string: bookmark.urlString) {
             webView.load(URLRequest(url: url))
         }
         return webView
     }
 
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        // 缩放实时生效
+        webView.pageZoom = zoom
+
+        // UA 变化时切换并重载
+        let wantUA = desktopUA ? Self.desktopUserAgent : nil
+        if webView.customUserAgent != wantUA {
+            webView.customUserAgent = wantUA
+            webView.reload()
+        }
+
+        // 文字大小变化时实时注入
+        let adjust = Int(fontAdjust)
+        if adjust != context.coordinator.lastAppliedFontAdjust {
+            context.coordinator.lastAppliedFontAdjust = adjust
+            if adjust != 0 {
+                let js = "document.documentElement.style.webkitTextSizeAdjust='\(100 + adjust)%';"
+                webView.evaluateJavaScript(js, completionHandler: nil)
+            } else {
+                webView.reload()
+            }
+        }
+    }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(self)
+        let c = Coordinator(self)
+        c.lastAppliedFontAdjust = Int(fontAdjust)
+        return c
     }
 }

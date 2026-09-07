@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct HomeView: View {
-    @StateObject private var store = BookmarkStore()
+    @EnvironmentObject var store: BookmarkStore
     @State private var editing: Bookmark?
     @State private var showAdd = false
     @State private var showImporter = false
