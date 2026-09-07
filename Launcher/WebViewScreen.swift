@@ -84,27 +84,28 @@ struct QuickSettingsView: View {
                     Toggle("桌面版页面 (UA)", isOn: $desktopUA)
                 }
                 Section {
-                    Button("保存到书签") {
-                        if let idx = store.bookmarks.firstIndex(where: { $0.id == bookmarkID }) {
-                            store.bookmarks[idx].scale = zoom
-                            store.bookmarks[idx].fontAdjust = fontAdjust
-                            store.bookmarks[idx].desktopUA = desktopUA
-                        }
-                        dismiss()
-                    }
-                } footer: {
-                    Text("不保存则仅本次浏览生效")
+                    Button("完成") { save() }
                 }
             }
             .navigationTitle("快捷设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("关闭") { dismiss() }
+                    Button("关闭") { save(); dismiss() }
                 }
             }
+            .onDisappear { save() }
         }
         .presentationDetents([.medium])
+    }
+
+    /// 调整直接写回书签永久生效
+    private func save() {
+        if let idx = store.bookmarks.firstIndex(where: { $0.id == bookmarkID }) {
+            store.bookmarks[idx].scale = zoom
+            store.bookmarks[idx].fontAdjust = fontAdjust
+            store.bookmarks[idx].desktopUA = desktopUA
+        }
     }
 }
 
