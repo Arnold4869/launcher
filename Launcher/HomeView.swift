@@ -2,13 +2,14 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var store: BookmarkStore
+    @EnvironmentObject var wm: WindowManager
     @State private var editing: Bookmark?
     @State private var showAdd = false
     @State private var showImporter = false
     @State private var importMessage: String?
     @State private var showImportAlert = false
     @State private var showSettings = false
-    @State private var splitPair: SplitPair?   // 分屏流程（选择→展示都在同一 cover 内）
+    @State private var splitPair: SplitPair?
 
     var body: some View {
         NavigationStack {
@@ -26,7 +27,9 @@ struct HomeView: View {
                     ScrollView {
                         LazyVGrid(columns: gridColumns, spacing: 14) {
                             ForEach(store.bookmarks) { bm in
-                                NavigationLink(value: bm) {
+                                Button {
+                                    wm.open(bm)
+                                } label: {
                                     BookmarkCard(bm: bm)
                                 }
                                 .contextMenu {
@@ -53,9 +56,6 @@ struct HomeView: View {
                 }
             }
             .navigationTitle("Launcher")
-            .navigationDestination(for: Bookmark.self) { bm in
-                WebViewScreen(bookmark: bm)
-            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {

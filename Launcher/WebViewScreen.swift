@@ -1,6 +1,62 @@
 import SwiftUI
 import WebKit
 
+// MARK: - 悬浮窗（可拖动，默认右上角）
+
+struct FloatingWindowView: View {
+    @ObservedObject var wm: WindowManager
+    @State private var pos: CGPoint = CGPoint(x: UIScreen.main.bounds.width - 90, y: 120)
+    @State private var dragging = false
+
+    var body: some View {
+        let size: CGFloat = 72
+        VStack(spacing: 2) {
+            Text(wm.floating?.name ?? "?")
+                .font(.system(size: 8, weight: .semibold))
+                .lineLimit(1)
+                .frame(maxWidth: 80)
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(.systemGray6))
+                .frame(width: size, height: size)
+                .overlay {
+                    if let bm = wm.floating {
+                        WebView(bookmark: bm, zoom: 0.4, fontAdjust: 0, desktopUA: bm.desktopUA,
+                                onEdgeSwipeBack: {}, onEdgeSwipeBackEnabled: false)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                }
+        }
+        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+        .position(x: pos.x, y: pos.y)
+        .scaleEffect(dragging ? 1.05 : 1.0)
+        .onTapGesture {
+            wm.tapFloating()
+        }
+        .gesture(
+            DragGesture()
+                .onChanged { v in
+                    dragging = true
+                    pos = v.location
+                }
+                .onEnded { _ in
+                    dragging = false
+                    clampToEdges()
+                }
+        )
+        .onChange(of: wm.floating?.id) { _ in
+            // 悬浮窗内容变了，重置位置到右上角
+            pos = CGPoint(x: UIScreen.main.bounds.width - 90, y: 120)
+        }
+    }
+
+    private func clampToEdges() {
+        let w = UIScreen.main.bounds.width
+        let h = UIScreen.main.bounds.height
+        pos.x = min(max(pos.x, 60), w - 60)
+        pos.y = min(max(pos.y, 90), h - 90)
+    }
+}
+
 // MARK: - 分屏视图
 
 struct SplitViewScreen: View {
@@ -8,7 +64,7 @@ struct SplitViewScreen: View {
     let bottom: Bookmark
     @Environment(\.dismiss) private var dismiss
 
-    @State private var topFraction: Double = 0.5   // 上半屏占比
+    @State private var topFraction: Double = 0.5
     @State private var expanded = false
     @AppStorage("splitFraction") private var savedFraction: Double = 0.5
 
@@ -22,7 +78,6 @@ struct SplitViewScreen: View {
                         SplitLabel(bm: top)
                     }
 
-                // 可拖动分隔条
                 Rectangle()
                     .fill(Color.black.opacity(0.25))
                     .frame(height: 14)
@@ -87,7 +142,7 @@ struct SplitViewScreen: View {
     }
 }
 
-/// 分屏角落的小标签，标识哪半是哪个书签
+/// 分屏角落的小标签
 struct SplitLabel: View {
     let bm: Bookmark
 
@@ -103,12 +158,11 @@ struct SplitLabel: View {
     }
 }
 
-// MARK: - 单书签全屏视图
-
-struct WebViewScreen: View {
+/// 全屏 cover 内的视图：WebView + 悬浮窗（悬浮窗跟随 cover，保证全屏层内也能看到/点击互换）
+struct WebFullScreenView: View {
     let bookmark: Bookmark
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var store: BookmarkStore
+    @EnvironmentObject var wm: WindowManager
 
     @State private var showQuickSettings = false
     @State private var expanded = false
@@ -124,62 +178,95 @@ struct WebViewScreen: View {
     }
 
     var body: some View {
-        WebView(bookmark: bookmark, zoom: zoom, fontAdjust: fontAdjust, desktopUA: desktopUA,
-                onEdgeSwipeBack: { dismiss() })
-            .ignoresSafeArea()
-            .navigationBarBackButtonHidden(true)
-            .toolbar(.hidden, for: .navigationBar)
-            .overlay(alignment: .bottomTrailing) {
-                // 单个悬浮钮：点击展开 主页 / 设置
-                VStack(spacing: 12) {
-                    if expanded {
-                        Button {
-                            collapse(); dismiss()
-                        } label: {
-                            VStack(spacing: 2) {
-                                Image(systemName: "house")
-                                    .font(.system(size: 16, weight: .semibold))
-                                Text("主页").font(.system(size: 9))
-                            }
-                            .foregroundStyle(.white)
-                            .frame(width: 52, height: 52)
-                            .background(.black.opacity(0.55), in: Circle())
-                        }
-                        .transition(.scale.combined(with: .opacity))
+        ZStack {
+            WebView(bookmark: bookmark, zoom: zoom, fontAdjust: fontAdjust, desktopUA: desktopUA,
+                    onEdgeSwipeBack: { wm.minimizeCurrentToFloating() })
+                .ignoresSafeArea()
 
-                        Button {
-                            collapse(); showQuickSettings = true
-                        } label: {
-                            VStack(spacing: 2) {
-                                Image(systemName: "slider.horizontal.3")
-                                    .font(.system(size: 16, weight: .semibold))
-                                Text("设置").font(.system(size: 9))
-                            }
-                            .foregroundStyle(.white)
-                            .frame(width: 52, height: 52)
-                            .background(.black.opacity(0.55), in: Circle())
-                        }
-                        .transition(.scale.combined(with: .opacity))
-                    }
+            // 悬浮窗跟随全屏层
+            if wm.floating != nil {
+                FloatingWindowView(wm: wm)
+            }
 
-                    Button {
-                        withAnimation(.spring(duration: 0.25)) { expanded.toggle() }
-                    } label: {
-                        Image(systemName: expanded ? "xmark" : "ellipsis")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 52, height: 52)
-                            .background(.black.opacity(0.55), in: Circle())
-                    }
+            // 悬浮按钮
+            VStack { Spacer()
+                HStack { Spacer()
+                    floatingButtons
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 34)
                 }
-                .padding(.trailing, 20)
-                .padding(.bottom, 34)
             }
-            .sheet(isPresented: $showQuickSettings) {
-                QuickSettingsView(bookmarkID: bookmark.id,
-                                  zoom: $zoom, fontAdjust: $fontAdjust, desktopUA: $desktopUA)
-                    .environmentObject(store)
+        }
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showQuickSettings) {
+            QuickSettingsView(bookmarkID: bookmark.id,
+                              zoom: $zoom, fontAdjust: $fontAdjust, desktopUA: $desktopUA)
+                .environmentObject(store)
+        }
+        .onChange(of: wm.fullScreen?.id) { _ in
+            // 悬浮互换时本页仍保留；全屏被关(nil)时 cover 自动关闭
+        }
+    }
+
+    /// 悬浮窗被点后：fullScreen 变化会驱动 cover 内容切换。
+    /// 全屏变 nil 时 cover 需关闭 → 用 onChange 兼容两种情况。
+    private var floatingButtons: some View {
+        VStack(spacing: 12) {
+            if expanded {
+                Button {
+                    collapse(); wm.minimizeCurrentToFloating()
+                } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: "house")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("主页").font(.system(size: 9))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(.black.opacity(0.55), in: Circle())
+                }
+                .transition(.scale.combined(with: .opacity))
+
+                Button {
+                    collapse(); wm.minimizeCurrentToFloating()
+                } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: "pip.enter")
+                            .font(.system(size: 15, weight: .semibold))
+                        Text("悬浮").font(.system(size: 9))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(.black.opacity(0.55), in: Circle())
+                }
+                .transition(.scale.combined(with: .opacity))
+
+                Button {
+                    collapse(); showQuickSettings = true
+                } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("设置").font(.system(size: 9))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(.black.opacity(0.55), in: Circle())
+                }
+                .transition(.scale.combined(with: .opacity))
             }
+
+            Button {
+                withAnimation(.spring(duration: 0.25)) { expanded.toggle() }
+            } label: {
+                Image(systemName: expanded ? "xmark" : "ellipsis")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(.black.opacity(0.55), in: Circle())
+            }
+        }
     }
 
     private func collapse() {
@@ -314,7 +401,6 @@ struct WebView: UIViewRepresentable {
             webView.customUserAgent = Self.desktopUserAgent
         }
 
-        // 左边缘右滑 → 返回主页（仅全屏模式，分屏时传空回调）
         if onEdgeSwipeBackEnabled {
             let edgeGesture = UIScreenEdgePanGestureRecognizer(
                 target: context.coordinator, action: #selector(Coordinator.edgeSwiped))
@@ -330,17 +416,14 @@ struct WebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        // 缩放实时生效
         webView.pageZoom = zoom
 
-        // UA 变化时切换并重载
         let wantUA = desktopUA ? Self.desktopUserAgent : nil
         if webView.customUserAgent != wantUA {
             webView.customUserAgent = wantUA
             webView.reload()
         }
 
-        // 文字大小变化时实时注入
         let adjust = Int(fontAdjust)
         if adjust != context.coordinator.lastAppliedFontAdjust {
             context.coordinator.lastAppliedFontAdjust = adjust
