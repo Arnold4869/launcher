@@ -1,6 +1,110 @@
 import SwiftUI
 import WebKit
 
+// MARK: - 分屏视图
+
+struct SplitViewScreen: View {
+    let top: Bookmark
+    let bottom: Bookmark
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var topFraction: Double = 0.5   // 上半屏占比
+    @State private var expanded = false
+    @AppStorage("splitFraction") private var savedFraction: Double = 0.5
+
+    var body: some View {
+        GeometryReader { geo in
+            VStack(spacing: 0) {
+                WebView(bookmark: top, zoom: top.scale, fontAdjust: top.fontAdjust,
+                        desktopUA: top.desktopUA, onEdgeSwipeBack: {})
+                    .frame(height: geo.size.height * topFraction)
+                    .overlay(alignment: .topLeading) {
+                        SplitLabel(bm: top)
+                    }
+
+                // 可拖动分隔条
+                Rectangle()
+                    .fill(Color.black.opacity(0.25))
+                    .frame(height: 14)
+                    .contentShape(Rectangle())
+                    .overlay {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.9))
+                            .frame(width: 60, height: 5)
+                            .cornerRadius(3)
+                    }
+                    .gesture(
+                        DragGesture()
+                            .onChanged { v in
+                                topFraction = min(0.85, max(0.15, topFraction + v.location.y / geo.size.height - v.startLocation.y / geo.size.height))
+                            }
+                    )
+
+                WebView(bookmark: bottom, zoom: bottom.scale, fontAdjust: bottom.fontAdjust,
+                        desktopUA: bottom.desktopUA, onEdgeSwipeBack: {})
+                    .overlay(alignment: .topLeading) {
+                        SplitLabel(bm: bottom)
+                    }
+            }
+        }
+        .ignoresSafeArea()
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .overlay(alignment: .bottomTrailing) {
+            VStack(spacing: 12) {
+                if expanded {
+                    Button {
+                        collapse(); savedFraction = topFraction; dismiss()
+                    } label: {
+                        VStack(spacing: 2) {
+                            Image(systemName: "house").font(.system(size: 16, weight: .semibold))
+                            Text("主页").font(.system(size: 9))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(width: 52, height: 52)
+                        .background(.black.opacity(0.55), in: Circle())
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                }
+                Button {
+                    withAnimation(.spring(duration: 0.25)) { expanded.toggle() }
+                } label: {
+                    Image(systemName: expanded ? "xmark" : "ellipsis")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 52, height: 52)
+                        .background(.black.opacity(0.55), in: Circle())
+                }
+            }
+            .padding(.trailing, 20)
+            .padding(.bottom, 34)
+        }
+        .onAppear { topFraction = savedFraction }
+    }
+
+    private func collapse() {
+        withAnimation(.spring(duration: 0.25)) { expanded = false }
+    }
+}
+
+/// 分屏角落的小标签，标识哪半是哪个书签
+struct SplitLabel: View {
+    let bm: Bookmark
+
+    var body: some View {
+        let colors = CardPalette.colors(for: bm.colorIndex)
+        Text(bm.name)
+            .font(.caption.bold())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(colors[1].opacity(0.85), in: Capsule())
+            .padding(8)
+    }
+}
+
+// MARK: - 单书签全屏视图
+
 struct WebViewScreen: View {
     let bookmark: Bookmark
     @Environment(\.dismiss) private var dismiss
@@ -26,7 +130,7 @@ struct WebViewScreen: View {
             .navigationBarBackButtonHidden(true)
             .toolbar(.hidden, for: .navigationBar)
             .overlay(alignment: .bottomTrailing) {
-                // 单个悬浮钮：点击展开 返回主页 / 快捷设置
+                // 单个悬浮钮：点击展开 主页 / 设置
                 VStack(spacing: 12) {
                     if expanded {
                         Button {
@@ -136,6 +240,8 @@ struct QuickSettingsView: View {
     }
 }
 
+// MARK: - WKWebView 封装
+
 struct WebView: UIViewRepresentable {
     let bookmark: Bookmark
     let zoom: Double
@@ -207,12 +313,14 @@ struct WebView: UIViewRepresentable {
             webView.customUserAgent = Self.desktopUserAgent
         }
 
-        // 左边缘右滑 → 返回主页
-        let edgeGesture = UIScreenEdgePanGestureRecognizer(
-            target: context.coordinator, action: #selector(Coordinator.edgeSwiped))
-        edgeGesture.edges = .left
-        edgeGesture.delegate = context.coordinator
-        webView.addGestureRecognizer(edgeGesture)
+        // 左边缘右滑 → 返回主页（仅全屏模式）
+        if onEdgeSwipeBack != {} {
+            let edgeGesture = UIScreenEdgePanGestureRecognizer(
+                target: context.coordinator, action: #selector(Coordinator.edgeSwiped))
+            edgeGesture.edges = .left
+            edgeGesture.delegate = context.coordinator
+            webView.addGestureRecognizer(edgeGesture)
+        }
 
         if let url = URL(string: bookmark.urlString) {
             webView.load(URLRequest(url: url))
