@@ -3,6 +3,8 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject var store: BookmarkStore
     @EnvironmentObject var wm: WindowManager
+    // 本地 AppStorage：设置页改动实时刷新网格
+    @AppStorage("gridColumns") private var gridColumnsCount = 2
     @State private var editing: Bookmark?
     @State private var showAdd = false
     @State private var showImporter = false
@@ -115,7 +117,7 @@ struct HomeView: View {
     }
 
     private var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 14), count: GridSettings.columns)
+        Array(repeating: GridItem(.flexible(), spacing: 14), count: gridColumnsCount)
     }
 }
 
