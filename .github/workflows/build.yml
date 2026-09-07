@@ -37,16 +37,24 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
-            MARKETING_VERSION=${{ steps.ver.outputs.marketing }} \
-            CURRENT_PROJECT_VERSION=${{ steps.ver.outputs.build }} \
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
             build
 
           mkdir -p Payload
           cp -r "build/Build/Products/Release-iphoneos/Launcher.app" Payload/
+
+          # 直接写版本号进 Info.plist（xcodegen 的 plist 是字面量，命令行覆盖无效）
+          VER=${{ steps.ver.outputs.marketing }}
+          BUILD=${{ steps.ver.outputs.build }}
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VER" Payload/Launcher.app/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" Payload/Launcher.app/Info.plist
+          echo "Packed version: $VER ($BUILD)"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Payload/Launcher.app/Info.plist
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" Payload/Launcher.app/Info.plist
+
           zip -qr Launcher-unsigned.ipa Payload
           mkdir -p output
-          mv Launcher-unsigned.ipa "output/Launcher-${{ steps.ver.outputs.marketing }}.ipa"
+          mv Launcher-unsigned.ipa "output/Launcher-${VER}.ipa"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
