@@ -35,10 +35,6 @@ struct FloatingWindow: View {
     var body: some View {
         let w = wm.floatingWidth
         let h = wm.floatingHeight
-        let screen = UIScreen.main.bounds
-        // 缩略图：WebView 按全屏尺寸渲染，整体 scale 到悬浮窗大小
-        let scaleX = w / screen.width
-        let scaleY = h / screen.height
 
         VStack(spacing: 0) {
             // 标题栏：拖=移动窗口；点书签名=切换；×=关闭
@@ -75,13 +71,11 @@ struct FloatingWindow: View {
                     }
             )
 
-            // 页面区域：网页可直接操作（滑动/点击）；边角把手=调整大小；双击空白=切换
+            // 页面区域：WebView 按悬浮窗实际尺寸渲染（真视口）
+            // 字体大小不变，窗口变大=显示更多内容；滑动/点击直接操作
             ZStack {
-                // 真实缩略图：WebView 以全屏大小渲染再整体缩小，触摸坐标由 transform 自动映射
                 PageWebView(page: page)
-                    .frame(width: screen.width, height: screen.height)
-                    .scaleEffect(x: scaleX, y: scaleY, anchor: .topLeading)
-                    .frame(width: w, height: h, alignment: .topLeading)
+                    .frame(width: w, height: h)
                     .clipped()
 
                 // 边/角把手（只在边缘窄条，不挡中间）
