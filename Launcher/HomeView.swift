@@ -136,9 +136,12 @@ struct BookmarkCard: View {
                 .frame(height: cardHeight)
                 .shadow(color: colors[1].opacity(0.35), radius: 6, x: 0, y: 3)
             Text(bm.name)
-                .font(.title3.bold())
+                .font(.system(size: max(15, cardHeight * 0.22), weight: .bold))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.6)
+                .shadow(color: .black.opacity(0.25), radius: 2, x: 0, y: 1)
                 .padding(.horizontal, 10)
         }
     }
