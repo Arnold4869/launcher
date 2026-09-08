@@ -11,8 +11,6 @@ import SwiftUI
 struct FloatingMenuButton: View {
     let expanded: Bool
     let onToggle: () -> Void
-    // 主题色：跟随当前书签卡片渐变色（Liquid Glass tint 自动融入页面主题）
-    var themeTint: Color = .indigo
 
     // 位置持久化（相对屏幕的 x/y，屏幕坐标系 GeometryReader 内）
     @AppStorage("fabPosX") private var storedX: Double = -1   // -1 = 未初始化，用默认右下
@@ -36,20 +34,26 @@ struct FloatingMenuButton: View {
                     Color.clear
                         .contentShape(Rectangle())
                         .onTapGesture { collapseAndDock() }
+                }
 
-                    VStack(spacing: 12) {
-                        MenuButtonItem(icon: "house", label: "主页", tint: .blue, size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionHome, object: nil) }
-                        MenuButtonItem(icon: "square.split.2x1", label: "分屏", tint: .blue, size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionSplit, object: nil) }
-                        MenuButtonItem(icon: "arrow.clockwise", label: "清缓存", tint: .orange, size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionClearCache, object: nil) }
-                        MenuButtonItem(icon: "slider.horizontal.3", label: "设置", tint: .blue, size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionSettings, object: nil) }
+                // 展开时菜单贴边显示（左吸边→菜单列也贴左，右同理），收起时在钮位置
+                Group {
+                    if expanded {
+                        // 菜单列：主钮在底部，四个子钮向上展开，整列贴边
+                        VStack(spacing: 12) {
+                            MenuButtonItem(icon: "house", label: "主页", tint: .clear, size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionHome, object: nil) }
+                            MenuButtonItem(icon: "square.split.2x1", label: "分屏", tint: .clear, size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionSplit, object: nil) }
+                            MenuButtonItem(icon: "arrow.clockwise", label: "清缓存", tint: .clear, size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionClearCache, object: nil) }
+                            MenuButtonItem(icon: "slider.horizontal.3", label: "设置", tint: .clear, size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionSettings, object: nil) }
+                            mainButton
+                        }
+                        .transition(.scale.combined(with: .opacity))
+                    } else {
                         mainButton
                     }
-                    .transition(.scale.combined(with: .opacity))
-                } else {
-                    mainButton
                 }
+                .position(expanded ? expandedMenuPosition(size) : (docked ? dockedPosition(size) : clamped(pos, size)))
             }
-            .position(docked ? dockedPosition(size) : clamped(pos, size))
             .animation(.spring(duration: 0.3), value: docked)
             .animation(.spring(duration: 0.3), value: expanded)
             .onAppear {
@@ -69,6 +73,19 @@ struct FloatingMenuButton: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// 展开时菜单位置：主钮仍在原地，整列从主钮位置向上展开，且 x 贴到所属侧边
+    private func expandedMenuPosition(_ size: CGSize) -> CGPoint {
+        let leftSide = pos.x < size.width / 2
+        let menuHeight = buttonSize * 5 + 12 * 4   // 5 个钮 + 间距
+        let x = leftSide
+            ? edgeMargin + buttonSize/2
+            : size.width - edgeMargin - buttonSize/2
+        // 主钮贴底展开：整列底部 = 主钮位置，向上顶到安全区
+        let bottomY = max(pos.y, size.height - 40)
+        let y = max(menuHeight/2 + 20, bottomY - (menuHeight/2 - buttonSize/2))
+        return CGPoint(x: x, y: y)
     }
 
     // MARK: 主钮
@@ -91,7 +108,7 @@ struct FloatingMenuButton: View {
                 .foregroundStyle(.white)
                 .frame(width: buttonSize, height: buttonSize)
         }
-        .launcherGlass(.tinted(themeTint), in: .circle, interactive: true)
+        .launcherGlass(.clear, in: .circle, interactive: true)
         // 拖动手势：DragGesture 挂在按钮外层（玻璃按钮点击不冲突）
         .simultaneousGesture(
             DragGesture(minimumDistance: 8)

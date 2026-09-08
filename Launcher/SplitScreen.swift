@@ -45,12 +45,10 @@ struct SplitViewScreen: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .overlay {
-            // 可拖动 + 吸边隐藏悬浮钮（与全屏页共用位置），tint 跟随上屏书签主色
-            FloatingMenuButton(expanded: expanded,
-                               onToggle: {
+            // 可拖动 + 吸边隐藏悬浮钮（与全屏页共用位置）
+            FloatingMenuButton(expanded: expanded, onToggle: {
                 withAnimation(.spring(duration: 0.25)) { expanded.toggle() }
-            },
-                               themeTint: CardPalette.primaryColor(for: top.colorIndex))
+            })
             .onReceive(NotificationCenter.default.publisher(for: .fabActionHome)) { _ in
                 expanded = false; savedFraction = topFraction
                 wm.splitTop = nil
