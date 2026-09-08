@@ -32,9 +32,8 @@ private struct LauncherGlassModifier<S: Shape>: ViewModifier {
     let shape: S
     let interactive: Bool
 
-    static func nativeGlass(_ style: LauncherGlassStyle, interactive: Bool) -> Glass? {
-        // 只在 iOS 26+ 有值；调用侧用 #available 判断
-        guard #available(iOS 26.0, *) else { return nil }
+    @available(iOS 26.0, *)
+    static func nativeGlass(_ style: LauncherGlassStyle, interactive: Bool) -> Glass {
         let base: Glass
         switch style {
         case .regular: base = .regular
@@ -48,16 +47,21 @@ private struct LauncherGlassModifier<S: Shape>: ViewModifier {
         return g
     }
 
+    /// 材质选择（<26 降级用）：clear 变体用更透的 ultraThin
+    var legacyMaterial: Material {
+        self == .clear ? Material.ultraThinMaterial : Material.regularMaterial
+    }
+
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *), let glass = Self.nativeGlass(style, interactive: interactive) {
+        if #available(iOS 26.0, *) {
             // 【系统原生玻璃】iOS 26 真实 Liquid Glass：lens 折射+动态高光
-            content.glassEffect(glass, in: shape)
+            content.glassEffect(Self.nativeGlass(style, interactive: interactive), in: shape)
         } else {
             // 【自定义玻璃】<26 降级：Material 模拟 + tint overlay
             content
                 .background(
                     ZStack {
-                        shape.fill(style == .clear ? .ultraThinMaterial : .regularMaterial)
+                        shape.fill(style.legacyMaterial)
                         if let tint = style.tintColor {
                             shape.fill(tint.opacity(0.25)).blendMode(.overlay)
                         }
