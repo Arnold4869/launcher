@@ -23,11 +23,15 @@ jobs:
       - name: Compute version
         id: ver
         run: |
-          # 每次 commit 自动递增: 1.0.<commit 数>, build 号 = run 号
-          COMMITS=$(git rev-list --count HEAD)
-          echo "marketing=1.0.${COMMITS}" >> $GITHUB_OUTPUT
+          # 语义化版本：仓库根文件 VERSION 存 "MAJOR.MINOR.PATCH"（新功能→MINOR+1,PATCH=0；bug修复→PATCH+1）
+          # MAJOR/MINOR 由开发时手动更新 VERSION 文件，本脚本只读它；build 号 = run 号
+          VER=$(cat VERSION | tr -d '[:space:]')
+          if ! [[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "VERSION file invalid: '$VER'"; exit 1
+          fi
+          echo "marketing=${VER}" >> $GITHUB_OUTPUT
           echo "build=${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
-          echo "Version: 1.0.${COMMITS} (build ${GITHUB_RUN_NUMBER})"
+          echo "Version: ${VER} (build ${GITHUB_RUN_NUMBER})"
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -60,7 +64,8 @@ jobs:
 
           zip -qr Launcher-unsigned.ipa Payload
           mkdir -p output
-          mv Launcher-unsigned.ipa "output/Launcher-${VER}.ipa"
+          # 文件名不带版本号（固定名，覆盖更新）
+          mv Launcher-unsigned.ipa output/Launcher-unsigned.ipa
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
