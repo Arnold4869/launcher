@@ -15,30 +15,47 @@ struct SplitViewScreen: View {
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: 0) {
-                SplitWebView(bm: top)
-                    .frame(height: geo.size.height * topFraction)
-                    .overlay(alignment: .topLeading) { SplitLabel(bm: top) }
+                if topFraction > 0.02 {
+                    // 上半屏（拖到最底时关闭）
+                    SplitWebView(bm: top)
+                        .frame(height: geo.size.height * max(topFraction, 0))
+                        .overlay(alignment: .topLeading) { SplitLabel(bm: top) }
+                }
 
-                Rectangle()
-                    .fill(Color.clear)
-                    .frame(height: 14)
-                    .contentShape(Rectangle())
-                    .overlay {
-                        // 【玻璃 → 原生 glassEffect/.regular】分隔条拉杆=拖拽控件
-                        Capsule()
-                            .fill(Color.clear)
-                            .frame(width: 60, height: 5)
-                            .launcherGlass(.regular, in: .capsule, interactive: false)
-                    }
-                    .gesture(
-                        DragGesture()
-                            .onChanged { v in
-                                topFraction = min(0.85, max(0.15, topFraction + (v.location.y - v.startLocation.y) / geo.size.height))
-                            }
-                    )
+                if topFraction > 0.02 && topFraction < 0.98 {
+                    // 分隔条拉杆：拖到最上/最下 = 关闭对应半屏
+                    Rectangle()
+                        .fill(Color.clear)
+                        .frame(height: 14)
+                        .contentShape(Rectangle())
+                        .overlay {
+                            // 【玻璃 → 原生 glassEffect/.regular】分隔条拉杆=拖拽控件
+                            Capsule()
+                                .fill(Color.clear)
+                                .frame(width: 60, height: 5)
+                                .launcherGlass(.regular, in: .capsule, interactive: false)
+                        }
+                        .gesture(
+                            DragGesture()
+                                .onChanged { v in
+                                    topFraction = min(1.0, max(0.0, topFraction + (v.location.y - v.startLocation.y) / geo.size.height))
+                                }
+                                .onEnded { v in
+                                    // 拖到最上 = 关下半屏（只剩上半屏）；拖到最下 = 关上半屏
+                                    if topFraction >= 0.95 {
+                                        closeHalf(.bottom)
+                                    } else if topFraction <= 0.05 {
+                                        closeHalf(.top)
+                                    }
+                                }
+                        )
+                }
 
-                SplitWebView(bm: bottom)
-                    .overlay(alignment: .topLeading) { SplitLabel(bm: bottom) }
+                if topFraction < 0.98 {
+                    // 下半屏（拖到最顶时关闭）
+                    SplitWebView(bm: bottom)
+                        .overlay(alignment: .topLeading) { SplitLabel(bm: bottom) }
+                }
             }
         }
         .ignoresSafeArea()
@@ -56,6 +73,22 @@ struct SplitViewScreen: View {
             }
         }
         .onAppear { topFraction = savedFraction }
+    }
+
+    private enum Half { case top, bottom }
+
+    /// 关闭一半：只剩另一半（分屏退出后全屏页显示保留的那半屏）
+    private func closeHalf(_ half: Half) {
+        savedFraction = 0.5
+        if half == .bottom {
+            // 拖到最下 = 只剩上半屏 → 直接退出分屏，回到上半屏的全屏页
+            wm.splitTop = nil
+            wm.splitBottom = nil
+        } else {
+            // 拖到最上 = 只剩下半屏 → 下半屏书签转正为全屏页内容
+            wm.splitTop = wm.splitBottom
+            wm.splitBottom = nil
+        }
     }
 }
 
