@@ -49,7 +49,7 @@ private struct LauncherGlassModifier<S: Shape>: ViewModifier {
 
     /// 材质选择（<26 降级用）：clear 变体用更透的 ultraThin
     var legacyMaterial: Material {
-        self == .clear ? Material.ultraThinMaterial : Material.regularMaterial
+        style == .clear ? Material.ultraThinMaterial : Material.regularMaterial
     }
 
     func body(content: Content) -> some View {
