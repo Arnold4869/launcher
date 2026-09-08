@@ -15,76 +15,87 @@ struct FloatingMenuButton: View {
     // 位置持久化（相对屏幕的 x/y，屏幕坐标系 GeometryReader 内）
     @AppStorage("fabPosX") private var storedX: Double = -1   // -1 = 未初始化，用默认右下
     @AppStorage("fabPosY") private var storedY: Double = -1
+    // 彻底隐藏（设置页可重新启用）
+    @AppStorage("fabHidden") private var fabHidden: Bool = false
 
     @State private var pos: CGPoint = .zero
     @State private var initialized = false
     @State private var docked: Bool = false   // 是否已吸边隐藏（只露耳朵）
 
     private let buttonSize: CGFloat = 52
-    private let revealWidth: CGFloat = 6      // 吸边后露出的小耳朵宽度
-    private let edgeMargin: CGFloat = 8       // 吸边后距屏幕边缘
+    private let revealWidth: CGFloat = 14     // 吸边后露出的耳朵宽度（可点但不突兀）
+    private let edgeMargin: CGFloat = 2       // 吸边后距屏幕边缘
 
     var body: some View {
         GeometryReader { geo in
             let size = geo.size
 
-            ZStack {
-                if expanded {
-                    // 展开时铺透明点击层：点菜单外任意处 = 收起并重新吸边
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .onTapGesture { collapseAndDock() }
-                }
-
-                // 展开时菜单贴边显示（左吸边→菜单列也贴左，右同理），收起时在钮位置
-                Group {
+            if fabHidden {
+                // 彻底隐藏：设置页「悬浮按钮」开关可恢复
+                Color.clear
+            } else {
+                ZStack {
                     if expanded {
-                        // 菜单列：主钮在底部，四个子钮向上展开，整列贴边
-                        VStack(spacing: 12) {
-                            MenuButtonItem(icon: "house", label: "主页", tint: .clear, size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionHome, object: nil) }
-                            MenuButtonItem(icon: "square.split.2x1", label: "分屏", tint: .clear, size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionSplit, object: nil) }
-                            MenuButtonItem(icon: "arrow.clockwise", label: "清缓存", tint: .clear, size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionClearCache, object: nil) }
-                            MenuButtonItem(icon: "slider.horizontal.3", label: "设置", tint: .clear, size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionSettings, object: nil) }
+                        // 展开时铺透明点击层：点菜单外任意处 = 收起并重新吸边
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture { collapseAndDock() }
+                    }
+
+                    // 展开时菜单贴边显示（左吸边→菜单列也贴左，右同理），收起时在钮位置
+                    Group {
+                        if expanded {
+                            // 菜单列：主钮在底部，五个子钮向上展开，整列贴边
+                            VStack(spacing: 12) {
+                                MenuButtonItem(icon: "house", label: "主页", size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionHome, object: nil) }
+                                MenuButtonItem(icon: "square.split.2x1", label: "分屏", size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionSplit, object: nil) }
+                                MenuButtonItem(icon: "arrow.clockwise", label: "清缓存", size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionClearCache, object: nil) }
+                                MenuButtonItem(icon: "slider.horizontal.3", label: "设置", size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionSettings, object: nil) }
+                                MenuButtonItem(icon: "eye.slash", label: "隐藏", size: buttonSize) {
+                                    onToggle()
+                                    withAnimation(.spring(duration: 0.3)) { fabHidden = true }
+                                }
+                                mainButton
+                            }
+                            .transition(.scale.combined(with: .opacity))
+                        } else {
                             mainButton
                         }
-                        .transition(.scale.combined(with: .opacity))
-                    } else {
-                        mainButton
+                    }
+                    .position(expanded ? expandedMenuPosition(size) : (docked ? dockedPosition(size) : clamped(pos, size)))
+                }
+                .animation(.spring(duration: 0.3), value: docked)
+                .animation(.spring(duration: 0.3), value: expanded)
+                .onAppear {
+                    if !initialized {
+                        initialized = true
+                        if storedX < 0 {
+                            // 默认右下角内缩一点（距边 20+20pt，保证拇指能按到）
+                            pos = CGPoint(x: size.width - 40, y: size.height - 70)
+                        } else {
+                            pos = CGPoint(x: storedX, y: storedY)
+                        }
+                        // 默认收起吸边状态（缩角落、露耳朵可点）
+                        docked = storedX > 0 && isNearEdge(pos.x, size.width)
                     }
                 }
-                .position(expanded ? expandedMenuPosition(size) : (docked ? dockedPosition(size) : clamped(pos, size)))
-            }
-            .animation(.spring(duration: 0.3), value: docked)
-            .animation(.spring(duration: 0.3), value: expanded)
-            .onAppear {
-                if !initialized {
-                    initialized = true
-                    if storedX < 0 {
-                        // 默认右下
-                        pos = CGPoint(x: size.width - 20 - buttonSize/2 - 20, y: size.height - 34 - buttonSize/2 - 20)
-                    } else {
-                        pos = CGPoint(x: storedX, y: storedY)
-                    }
-                    docked = storedX > 0 && isNearEdge(pos.x, size.width)
+                .onChange(of: size) { newSize in
+                    pos = clamped(pos, newSize)
                 }
-            }
-            .onChange(of: size) { newSize in
-                pos = clamped(pos, newSize)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// 展开时菜单位置：主钮仍在原地，整列从主钮位置向上展开，且 x 贴到所属侧边
+    /// 展开时菜单位置：整列贴到所属侧边，主钮在列底部（屏幕右/左下角区域向上展开）
     private func expandedMenuPosition(_ size: CGSize) -> CGPoint {
         let leftSide = pos.x < size.width / 2
-        let menuHeight = buttonSize * 5 + 12 * 4   // 5 个钮 + 间距
+        let menuHeight = buttonSize * 6 + 12 * 5   // 6 个钮 + 间距
         let x = leftSide
-            ? edgeMargin + buttonSize/2
-            : size.width - edgeMargin - buttonSize/2
-        // 主钮贴底展开：整列底部 = 主钮位置，向上顶到安全区
-        let bottomY = max(pos.y, size.height - 40)
-        let y = max(menuHeight/2 + 20, bottomY - (menuHeight/2 - buttonSize/2))
+            ? edgeMargin + 18 + buttonSize/2
+            : size.width - edgeMargin - 18 - buttonSize/2
+        // 列底部贴屏幕底部安全区上方，向上展开
+        let y = size.height - 60 - menuHeight/2 + buttonSize/2
         return CGPoint(x: x, y: y)
     }
 
@@ -105,7 +116,7 @@ struct FloatingMenuButton: View {
         } label: {
             Image(systemName: expanded ? "xmark" : "ellipsis")
                 .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
                 .frame(width: buttonSize, height: buttonSize)
         }
         .launcherGlass(.clear, in: .circle, interactive: true)
@@ -171,7 +182,6 @@ struct FloatingMenuButton: View {
 struct MenuButtonItem: View {
     let icon: String
     let label: String
-    let tint: Color
     let size: CGFloat
     let action: () -> Void
 
@@ -181,10 +191,11 @@ struct MenuButtonItem: View {
                 Image(systemName: icon).font(.system(size: 16, weight: .semibold))
                 Text(label).font(.system(size: 9, weight: .semibold))
             }
-            .foregroundStyle(.white)
+            // 玻璃透明无色，白字看不清 → 系统主文字色（浅底黑字/深底白字自动适配）
+            .foregroundStyle(.primary)
             .frame(width: size, height: size)
         }
-        .launcherGlass(.tinted(tint), in: .circle, interactive: true)
+        .launcherGlass(.clear, in: .circle, interactive: true)
     }
 }
 
