@@ -101,6 +101,9 @@ struct SplitWebView: UIViewRepresentable {
                 completionHandler(.performDefaultHandling, nil)
             }
         }
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation) {
+            webView.injectLoginFill()
+        }
         let bm: Bookmark
         init(_ bm: Bookmark) { self.bm = bm }
     }
@@ -113,6 +116,7 @@ struct SplitWebView: UIViewRepresentable {
         wv.allowsBackForwardNavigationGestures = true
         wv.pageZoom = bm.scale
         if bm.desktopUA { wv.customUserAgent = PageWebView.desktopUserAgent }
+        wv.currentBookmark = bm
         if let url = URL(string: bm.urlString) { wv.load(URLRequest(url: url)) }
         return wv
     }

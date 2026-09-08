@@ -14,6 +14,8 @@ struct BookmarkEditView: View {
     @State private var desktopUA: Bool = false
     @State private var authUser: String = ""
     @State private var authPass: String = ""
+    @State private var loginUser: String = ""
+    @State private var loginPass: String = ""
 
     var body: some View {
         NavigationStack {
@@ -66,6 +68,21 @@ struct BookmarkEditView: View {
                 } footer: {
                     Text("填写后自动登录，无需弹窗输密码")
                 }
+
+                Section {
+                    TextField("用户名", text: $loginUser)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .textContentType(.username)
+                    SecureField("密码", text: $loginPass)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .textContentType(.password)
+                } header: {
+                    Text("网页登录自动填充 (可选)")
+                } footer: {
+                    Text("页面检测到登录表单时自动填入；账号可从 Bitwarden 复制粘贴")
+                }
             }
             .navigationTitle(bookmark == nil ? "添加书签" : "编辑书签")
             .navigationBarTitleDisplayMode(.inline)
@@ -92,6 +109,8 @@ struct BookmarkEditView: View {
         desktopUA = bm.desktopUA
         authUser = bm.basicAuthUser
         authPass = bm.basicAuthPass
+        loginUser = bm.loginUser
+        loginPass = bm.loginPass
     }
 
     private func save() {
@@ -109,7 +128,9 @@ struct BookmarkEditView: View {
             fontAdjust: fontAdjust,
             desktopUA: desktopUA,
             basicAuthUser: authUser,
-            basicAuthPass: authPass
+            basicAuthPass: authPass,
+            loginUser: loginUser,
+            loginPass: loginPass
         )
         if let idx = store.bookmarks.firstIndex(where: { $0.id == bm.id }) {
             store.bookmarks[idx] = bm

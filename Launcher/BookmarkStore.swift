@@ -42,6 +42,8 @@ struct Bookmark: Identifiable, Codable, Hashable {
     var desktopUA: Bool = false    // 桌面 UA
     var basicAuthUser: String = "" // HTTP Basic Auth 用户名（空 = 不启用）
     var basicAuthPass: String = "" // HTTP Basic Auth 密码
+    var loginUser: String = ""     // 网页登录表单自动填充用户名（空 = 不启用）
+    var loginPass: String = ""     // 网页登录表单自动填充密码
 }
 
 final class BookmarkStore: ObservableObject {

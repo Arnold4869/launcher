@@ -409,6 +409,10 @@ struct PageWebView: UIViewRepresentable {
             decisionHandler(.allow)
         }
 
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation) {
+            webView.injectLoginFill()
+        }
+
         // HTTP Basic Auth / Digest 自动应答
         func webView(_ webView: WKWebView,
                      didReceive challenge: URLAuthenticationChallenge,
@@ -452,6 +456,7 @@ struct PageWebView: UIViewRepresentable {
         if let url = URL(string: page.bookmark.urlString) {
             webView.load(URLRequest(url: url))
         }
+        webView.injectLoginFill()
         return webView
     }
 
@@ -484,3 +489,62 @@ extension WKWebView {
     }
 }
 private var kBookmarkKey: UInt8 = 0
+
+// 网页登录表单自动填充：页面加载后检测登录表单（input[type=password]），自动填入书签存的账密。
+// 不自动点登录按钮——填上后用户确认提交，账密错误也不会死循环。
+// 隐私处理：已填的密码框强制 type=password 圆点显示（防个别网站设成 text 明文）。
+// 注意：SplitScreen.swift 里的 SplitWebView 和本文件的 PageWebView 共用这个 extension。
+extension WKWebView {
+    func injectLoginFill() {
+        let bm = currentBookmark
+        guard !bm.loginUser.isEmpty else { return }
+        let user = bm.loginUser
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "")
+            .replacingOccurrences(of: "\r", with: "")
+        let pass = bm.loginPass
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "")
+            .replacingOccurrences(of: "\r", with: "")
+        // 多次尝试：SPA 页面登录框可能延迟渲染，1s/3s/6s 各试一次
+        let js = """
+        (function(){
+          var user = '\(user)', pass = '\(pass)';
+          function fill() {
+            var pw = document.querySelector("input[type=password]");
+            if (!pw) return false;
+            var form = pw.form || pw.closest("form");
+            var userEl = null;
+            if (form) {
+              userEl = form.querySelector("input[type=email], input[type=text], input[type=tel], input:not([type])");
+            }
+            if (!userEl) {
+              userEl = document.querySelector("input[type=email], input[type=text], input[type=tel], input[name*=user i], input[name*=account i], input[name*=phone i], input[id*=user i]");
+            }
+            if (!userEl) userEl = pw;
+            function setVal(el, v) {
+              if (!el) return;
+              var proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+              var setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+              setter.call(el, v);
+              el.dispatchEvent(new Event("input", {bubbles: true}));
+              el.dispatchEvent(new Event("change", {bubbles: true}));
+            }
+            var changed = false;
+            if ((userEl.value || "") !== user) { setVal(userEl, user); changed = true; }
+            if ((pw.value || "") !== pass) { setVal(pw, pass); changed = true; }
+            // 隐私：无论网站怎么设置，密码框强制按圆点显示
+            if (pw.type !== "password") { try { pw.type = "password"; } catch(e) {} }
+            pw.setAttribute("autocomplete", "off");
+            return changed;
+          }
+          [200, 1000, 3000, 6000].forEach(function(t){ setTimeout(fill, t); });
+        })();
+        """
+        evaluateJavaScript(js, completionHandler: nil)
+    }
+}
