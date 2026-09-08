@@ -468,7 +468,7 @@ struct PageWebView: UIViewRepresentable {
                   let host = url.host else { webView.reload(); return }
             let types = WKWebsiteDataStore.allWebsiteDataTypes()
             WKWebsiteDataStore.default().fetchDataRecords(ofTypes: types) { records in
-                let matching = records.filter { $0.domain.contains(host) }
+                let matching = records.filter { $0.displayName.contains(host) }
                 WKWebsiteDataStore.default().removeData(ofTypes: types, for: matching) {
                     DispatchQueue.main.async { webView.reload() }
                 }
