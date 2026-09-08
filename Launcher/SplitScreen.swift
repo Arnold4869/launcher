@@ -71,7 +71,10 @@ struct SplitViewScreen: View {
                 wm.splitBottom = nil
             }
         }
-        .onAppear { topFraction = savedFraction }
+        .onAppear {
+            // 每次进入分屏都初始化为标准 55/45 分割（上次关一半残留的 0/1 不再带进来）
+            topFraction = savedFraction <= 0.05 || savedFraction >= 0.95 ? 0.5 : savedFraction
+        }
     }
 
     private enum Half { case top, bottom }
