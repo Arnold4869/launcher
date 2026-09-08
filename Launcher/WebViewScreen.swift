@@ -301,6 +301,19 @@ struct FullscreenPage: View {
                 .transition(.scale.combined(with: .opacity))
 
                 Button {
+                    collapse(); NotificationCenter.default.post(name: .launcherClearRefresh, object: page.bookmark.id)
+                } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 16, weight: .semibold))
+                        Text("清缓存").font(.system(size: 9))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(.black.opacity(0.55), in: Circle())
+                }
+                .transition(.scale.combined(with: .opacity))
+
+                Button {
                     collapse(); showQuickSettings = true
                 } label: {
                     VStack(spacing: 2) {
@@ -392,9 +405,13 @@ struct PageWebView: UIViewRepresentable {
     var fontAdjust: Double = 0
     var desktopUA: Bool = false
     var edgeSwipeHome: (() -> Void)? = nil
-
     final class Coordinator: NSObject, WKNavigationDelegate, UIGestureRecognizerDelegate {
         var edgeSwipeHome: (() -> Void)? = nil
+        var clearRefreshObserver: NSObjectProtocol? = nil
+
+        deinit {
+            if let obs = clearRefreshObserver { NotificationCenter.default.removeObserver(obs) }
+        }
 
         @objc func edgeSwiped() {
             edgeSwipeHome?()
@@ -441,6 +458,23 @@ struct PageWebView: UIViewRepresentable {
         webView.pageZoom = zoom
         webView.currentBookmark = page.bookmark
         context.coordinator.edgeSwipeHome = edgeSwipeHome
+
+        // 清缓存刷新：删掉该书签域名的全部站点数据（缓存/cookie/localStorage，登录态会丢）后重载
+        context.coordinator.clearRefreshObserver = NotificationCenter.default.addObserver(
+            forName: .launcherClearRefresh, object: nil, queue: .main) { [weak webView] note in
+            guard let targetID = note.object as? UUID,
+                  let webView, webView.currentBookmark.id == targetID else { return }
+            guard let url = URL(string: webView.currentBookmark.urlString),
+                  let host = url.host else { webView.reload(); return }
+            let types = WKWebsiteDataStore.allWebsiteDataTypes()
+            WKWebsiteDataStore.default().fetchDataRecords(ofTypes: types) { records in
+                let matching = records.filter { $0.domain.contains(host) }
+                WKWebsiteDataStore.default().removeData(ofTypes: types, for: matching) {
+                    DispatchQueue.main.async { webView.reload() }
+                }
+            }
+        }
+
         if desktopUA {
             webView.customUserAgent = PageWebView.desktopUserAgent
         }
@@ -489,6 +523,10 @@ extension WKWebView {
     }
 }
 private var kBookmarkKey: UInt8 = 0
+
+extension Notification.Name {
+    static let launcherClearRefresh = Notification.Name("launcherClearRefresh")
+}
 
 // 网页登录表单自动填充：页面加载后检测登录表单（input[type=password]），自动填入书签存的账密。
 // 不自动点登录按钮——填上后用户确认提交，账密错误也不会死循环。
