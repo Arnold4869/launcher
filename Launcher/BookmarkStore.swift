@@ -24,6 +24,11 @@ enum CardPalette {
     static func randomIndex() -> Int {
         Int.random(in: 0..<gradients.count)
     }
+
+    /// 卡片渐变主色（取渐变第一色），供悬浮钮 tint 跟随页面主题
+    static func primaryColor(for index: Int) -> Color {
+        colors(for: index)[0]
+    }
 }
 
 /// 每行列数（全局设置，持久化到 UserDefaults）

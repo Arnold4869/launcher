@@ -256,9 +256,12 @@ struct FullscreenPage: View {
         }
         .overlay {
             // 可拖动 + 自动吸边隐藏的悬浮钮（位置持久化，跟主屏共用）
-            FloatingMenuButton(expanded: expanded, onToggle: {
+            // tint 跟随当前书签卡片主色（Liquid Glass 淡彩透玻璃，融入页面主题）
+            FloatingMenuButton(expanded: expanded,
+                               onToggle: {
                 withAnimation(.spring(duration: 0.25)) { expanded.toggle() }
-            })
+            },
+                               themeTint: CardPalette.primaryColor(for: page.bookmark.colorIndex))
             .onReceive(NotificationCenter.default.publisher(for: .fabActionHome)) { _ in
                 expanded = false; wm.goHome()
             }

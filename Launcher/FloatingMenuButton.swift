@@ -11,6 +11,8 @@ import SwiftUI
 struct FloatingMenuButton: View {
     let expanded: Bool
     let onToggle: () -> Void
+    // 主题色：跟随当前书签卡片渐变色（Liquid Glass tint 自动融入页面主题）
+    var themeTint: Color = .indigo
 
     // 位置持久化（相对屏幕的 x/y，屏幕坐标系 GeometryReader 内）
     @AppStorage("fabPosX") private var storedX: Double = -1   // -1 = 未初始化，用默认右下
@@ -30,7 +32,11 @@ struct FloatingMenuButton: View {
 
             ZStack {
                 if expanded {
-                    // 展开菜单跟随主钮位置，竖排在主钮上方
+                    // 展开时铺透明点击层：点菜单外任意处 = 收起并重新吸边
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { collapseAndDock() }
+
                     VStack(spacing: 12) {
                         MenuButtonItem(icon: "house", label: "主页", tint: .blue, size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionHome, object: nil) }
                         MenuButtonItem(icon: "square.split.2x1", label: "分屏", tint: .blue, size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionSplit, object: nil) }
@@ -73,6 +79,9 @@ struct FloatingMenuButton: View {
                 // 吸边状态轻点：先弹出一点再展开菜单
                 withAnimation(.spring(duration: 0.3)) { docked = false }
                 onToggle()
+            } else if expanded {
+                // 展开状态点主钮（×）= 收起并重新吸边
+                collapseAndDock()
             } else {
                 onToggle()
             }
@@ -82,7 +91,7 @@ struct FloatingMenuButton: View {
                 .foregroundStyle(.white)
                 .frame(width: buttonSize, height: buttonSize)
         }
-        .launcherGlass(.tinted(.indigo), in: .circle, interactive: true)
+        .launcherGlass(.tinted(themeTint), in: .circle, interactive: true)
         // 拖动手势：DragGesture 挂在按钮外层（玻璃按钮点击不冲突）
         .simultaneousGesture(
             DragGesture(minimumDistance: 8)
@@ -131,6 +140,12 @@ struct FloatingMenuButton: View {
     private func savePos() {
         storedX = pos.x
         storedY = pos.y
+    }
+
+    /// 收起菜单并重新吸边隐藏（点×/点外部时调用）
+    private func collapseAndDock() {
+        onToggle()  // expanded = false（父视图 withAnimation）
+        withAnimation(.spring(duration: 0.3)) { docked = true }
     }
 }
 
