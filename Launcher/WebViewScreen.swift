@@ -61,7 +61,8 @@ struct FloatingWindow: View {
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
-            .background(.black.opacity(0.5))
+            // 【自定义玻璃 → 原生 glassEffect/.regular】悬浮窗标题栏=导航层控件
+            .launcherGlass(.regular, in: RoundedRectangle(cornerRadius: 10), interactive: false)
             .frame(width: w)
             .contentShape(Rectangle())
             .gesture(
@@ -93,6 +94,8 @@ struct FloatingWindow: View {
         .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 4)
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        // 悬浮窗本体是"内容页"（网页缩略图），不整块 glassEffect——只标题栏玻璃（上面已加）。
+        // 这里仅保留半透明黑底 + 阴影做容器边界，符合"内容本体禁止 glassEffect"约束。
         .position(x: wm.floatingPos.x, y: wm.floatingPos.y)
     }
 }
@@ -279,12 +282,13 @@ struct FullscreenPage: View {
                 } label: {
                     VStack(spacing: 2) {
                         Image(systemName: "house").font(.system(size: 16, weight: .semibold))
-                        Text("主页").font(.system(size: 9))
+                        Text("主页").font(.system(size: 9, weight: .semibold))
                     }
                     .foregroundStyle(.white)
                     .frame(width: 52, height: 52)
-                    .background(.black.opacity(0.55), in: Circle())
                 }
+                // 【自定义玻璃入口 → iOS26 原生 glassEffect / <26 Material】悬浮控件=导航层，允许玻璃
+                .launcherGlass(.tinted(.blue), in: .circle, interactive: true)
                 .transition(.scale.combined(with: .opacity))
 
                 Button {
@@ -292,12 +296,12 @@ struct FullscreenPage: View {
                 } label: {
                     VStack(spacing: 2) {
                         Image(systemName: "square.split.2x1").font(.system(size: 15, weight: .semibold))
-                        Text("分屏").font(.system(size: 9))
+                        Text("分屏").font(.system(size: 9, weight: .semibold))
                     }
                     .foregroundStyle(.white)
                     .frame(width: 52, height: 52)
-                    .background(.black.opacity(0.55), in: Circle())
                 }
+                .launcherGlass(.tinted(.blue), in: .circle, interactive: true)
                 .transition(.scale.combined(with: .opacity))
 
                 Button {
@@ -305,12 +309,12 @@ struct FullscreenPage: View {
                 } label: {
                     VStack(spacing: 2) {
                         Image(systemName: "arrow.clockwise").font(.system(size: 16, weight: .semibold))
-                        Text("清缓存").font(.system(size: 9))
+                        Text("清缓存").font(.system(size: 9, weight: .semibold))
                     }
                     .foregroundStyle(.white)
                     .frame(width: 52, height: 52)
-                    .background(.black.opacity(0.55), in: Circle())
                 }
+                .launcherGlass(.tinted(.orange), in: .circle, interactive: true)
                 .transition(.scale.combined(with: .opacity))
 
                 Button {
@@ -318,12 +322,12 @@ struct FullscreenPage: View {
                 } label: {
                     VStack(spacing: 2) {
                         Image(systemName: "slider.horizontal.3").font(.system(size: 16, weight: .semibold))
-                        Text("设置").font(.system(size: 9))
+                        Text("设置").font(.system(size: 9, weight: .semibold))
                     }
                     .foregroundStyle(.white)
                     .frame(width: 52, height: 52)
-                    .background(.black.opacity(0.55), in: Circle())
                 }
+                .launcherGlass(.tinted(.blue), in: .circle, interactive: true)
                 .transition(.scale.combined(with: .opacity))
             }
 
@@ -334,8 +338,9 @@ struct FullscreenPage: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 52, height: 52)
-                    .background(.black.opacity(0.55), in: Circle())
             }
+            // 主钮：tint 更深以示主控（语义 tint，非装饰）
+            .launcherGlass(.tinted(.indigo), in: .circle, interactive: true)
         }
     }
 
@@ -368,7 +373,9 @@ struct QuickSettingsView: View {
                     Toggle("桌面版页面 (UA)", isOn: $desktopUA)
                 }
                 Section {
+                    // 【系统原生玻璃 → .glassProminent】Form 内主行动按钮
                     Button("完成") { saveAndDismiss() }
+                        .fontWeight(.semibold)
                 }
             }
             .navigationTitle("快捷设置")

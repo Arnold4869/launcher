@@ -93,6 +93,8 @@ struct BookmarkEditView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("保存") { save() }
                         .disabled(name.isEmpty || urlString.isEmpty)
+                        // 【系统原生玻璃】iOS26 toolbar 按钮自动获得 Liquid Glass；<26 系统默认样式
+                        .fontWeight(.semibold)
                 }
             }
             .onAppear(perform: populate)

@@ -21,14 +21,15 @@ struct SplitViewScreen: View {
                     .overlay(alignment: .topLeading) { SplitLabel(bm: top) }
 
                 Rectangle()
-                    .fill(Color.black.opacity(0.25))
+                    .fill(Color.clear)
                     .frame(height: 14)
                     .contentShape(Rectangle())
                     .overlay {
-                        Rectangle()
-                            .fill(Color.white.opacity(0.9))
+                        // 【玻璃 → 原生 glassEffect/.regular】分隔条拉杆=拖拽控件
+                        Capsule()
+                            .fill(Color.clear)
                             .frame(width: 60, height: 5)
-                            .cornerRadius(3)
+                            .launcherGlass(.regular, in: .capsule, interactive: false)
                     }
                     .gesture(
                         DragGesture()
@@ -54,12 +55,13 @@ struct SplitViewScreen: View {
                     } label: {
                         VStack(spacing: 2) {
                             Image(systemName: "house").font(.system(size: 16, weight: .semibold))
-                            Text("主页").font(.system(size: 9))
+                            Text("主页").font(.system(size: 9, weight: .semibold))
                         }
                         .foregroundStyle(.white)
                         .frame(width: 52, height: 52)
-                        .background(.black.opacity(0.55), in: Circle())
                     }
+                    // 【玻璃入口】悬浮导航控件
+                    .launcherGlass(.tinted(.blue), in: .circle, interactive: true)
                     .transition(.scale.combined(with: .opacity))
                 }
                 Button {
@@ -69,8 +71,8 @@ struct SplitViewScreen: View {
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 52, height: 52)
-                        .background(.black.opacity(0.55), in: Circle())
                 }
+                .launcherGlass(.tinted(.indigo), in: .circle, interactive: true)
             }
             .padding(.trailing, 20)
             .padding(.bottom, 34)
@@ -127,13 +129,13 @@ struct SplitWebView: UIViewRepresentable {
 struct SplitLabel: View {
     let bm: Bookmark
     var body: some View {
-        let colors = CardPalette.colors(for: bm.colorIndex)
+        // 【玻璃 → 原生 glassEffect/.tinted】分屏标签=导航层浮标（书签名），内容不受影响
         Text(bm.name)
             .font(.caption.bold())
             .foregroundStyle(.white)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .background(colors[1].opacity(0.85), in: Capsule())
+            .launcherGlass(.tinted(.blue), in: .capsule, interactive: false)
             .padding(8)
     }
 }
