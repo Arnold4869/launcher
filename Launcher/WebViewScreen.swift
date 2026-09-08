@@ -253,13 +253,24 @@ struct FullscreenPage: View {
         ZStack {
             PageWebView(page: page, zoom: zoom, fontAdjust: fontAdjust, desktopUA: desktopUA,
                         edgeSwipeHome: { wm.goHome() })
-
-            VStack { Spacer()
-                HStack { Spacer()
-                    buttons
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 34)
-                }
+        }
+        .overlay {
+            // 可拖动 + 自动吸边隐藏的悬浮钮（位置持久化，跟主屏共用）
+            FloatingMenuButton(expanded: expanded, onToggle: {
+                withAnimation(.spring(duration: 0.25)) { expanded.toggle() }
+            })
+            .onReceive(NotificationCenter.default.publisher(for: .fabActionHome)) { _ in
+                expanded = false; wm.goHome()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .fabActionSplit)) { _ in
+                expanded = false; showSplitPicker = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .fabActionClearCache)) { _ in
+                expanded = false
+                NotificationCenter.default.post(name: .launcherClearRefresh, object: page.bookmark.id)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .fabActionSettings)) { _ in
+                expanded = false; showQuickSettings = true
             }
         }
         .sheet(isPresented: $showQuickSettings) {
@@ -272,80 +283,6 @@ struct FullscreenPage: View {
                 .environmentObject(store)
                 .environmentObject(wm)
         }
-    }
-
-    private var buttons: some View {
-        VStack(spacing: 12) {
-            if expanded {
-                Button {
-                    collapse(); wm.goHome()
-                } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: "house").font(.system(size: 16, weight: .semibold))
-                        Text("主页").font(.system(size: 9, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(width: 52, height: 52)
-                }
-                // 【自定义玻璃入口 → iOS26 原生 glassEffect / <26 Material】悬浮控件=导航层，允许玻璃
-                .launcherGlass(.tinted(.blue), in: .circle, interactive: true)
-                .transition(.scale.combined(with: .opacity))
-
-                Button {
-                    collapse(); showSplitPicker = true
-                } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: "square.split.2x1").font(.system(size: 15, weight: .semibold))
-                        Text("分屏").font(.system(size: 9, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(width: 52, height: 52)
-                }
-                .launcherGlass(.tinted(.blue), in: .circle, interactive: true)
-                .transition(.scale.combined(with: .opacity))
-
-                Button {
-                    collapse(); NotificationCenter.default.post(name: .launcherClearRefresh, object: page.bookmark.id)
-                } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: "arrow.clockwise").font(.system(size: 16, weight: .semibold))
-                        Text("清缓存").font(.system(size: 9, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(width: 52, height: 52)
-                }
-                .launcherGlass(.tinted(.orange), in: .circle, interactive: true)
-                .transition(.scale.combined(with: .opacity))
-
-                Button {
-                    collapse(); showQuickSettings = true
-                } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: "slider.horizontal.3").font(.system(size: 16, weight: .semibold))
-                        Text("设置").font(.system(size: 9, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(width: 52, height: 52)
-                }
-                .launcherGlass(.tinted(.blue), in: .circle, interactive: true)
-                .transition(.scale.combined(with: .opacity))
-            }
-
-            Button {
-                withAnimation(.spring(duration: 0.25)) { expanded.toggle() }
-            } label: {
-                Image(systemName: expanded ? "xmark" : "ellipsis")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 52, height: 52)
-            }
-            // 主钮：tint 更深以示主控（语义 tint，非装饰）
-            .launcherGlass(.tinted(.indigo), in: .circle, interactive: true)
-        }
-    }
-
-    private func collapse() {
-        withAnimation(.spring(duration: 0.25)) { expanded = false }
     }
 }
 

@@ -12,7 +12,6 @@ struct SplitViewScreen: View {
     @State private var expanded = false
     @EnvironmentObject var wm: WindowManager
     @AppStorage("splitFraction") private var savedFraction: Double = 0.5
-
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: 0) {
@@ -45,43 +44,18 @@ struct SplitViewScreen: View {
         .ignoresSafeArea()
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .overlay(alignment: .bottomTrailing) {
-            VStack(spacing: 12) {
-                if expanded {
-                    Button {
-                        collapse(); savedFraction = topFraction
-                        wm.splitTop = nil
-                        wm.splitBottom = nil
-                    } label: {
-                        VStack(spacing: 2) {
-                            Image(systemName: "house").font(.system(size: 16, weight: .semibold))
-                            Text("主页").font(.system(size: 9, weight: .semibold))
-                        }
-                        .foregroundStyle(.white)
-                        .frame(width: 52, height: 52)
-                    }
-                    // 【玻璃入口】悬浮导航控件
-                    .launcherGlass(.tinted(.blue), in: .circle, interactive: true)
-                    .transition(.scale.combined(with: .opacity))
-                }
-                Button {
-                    withAnimation(.spring(duration: 0.25)) { expanded.toggle() }
-                } label: {
-                    Image(systemName: expanded ? "xmark" : "ellipsis")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 52, height: 52)
-                }
-                .launcherGlass(.tinted(.indigo), in: .circle, interactive: true)
+        .overlay {
+            // 可拖动 + 吸边隐藏悬浮钮（与全屏页共用位置）
+            FloatingMenuButton(expanded: expanded, onToggle: {
+                withAnimation(.spring(duration: 0.25)) { expanded.toggle() }
+            })
+            .onReceive(NotificationCenter.default.publisher(for: .fabActionHome)) { _ in
+                expanded = false; savedFraction = topFraction
+                wm.splitTop = nil
+                wm.splitBottom = nil
             }
-            .padding(.trailing, 20)
-            .padding(.bottom, 34)
         }
         .onAppear { topFraction = savedFraction }
-    }
-
-    private func collapse() {
-        withAnimation(.spring(duration: 0.25)) { expanded = false }
     }
 }
 
