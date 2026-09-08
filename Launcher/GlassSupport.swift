@@ -62,7 +62,7 @@ private struct LauncherGlassModifier<S: Shape>: ViewModifier {
             content
                 .background(
                     ZStack {
-                        shape.fill(style.legacyMaterial)
+                        shape.fill(legacyMaterial)
                         if let tint = style.tintColor {
                             shape.fill(tint.opacity(0.25)).blendMode(.overlay)
                         }
