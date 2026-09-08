@@ -75,8 +75,8 @@ struct FloatingMenuButton: View {
                         } else {
                             pos = CGPoint(x: storedX, y: storedY)
                         }
-                        // 默认收起吸边状态（缩角落、露耳朵可点）
-                        docked = storedX > 0 && isNearEdge(pos.x, size.width)
+                        // 打开书签时自动吸边：位置靠近左右边缘就吸附，不在边缘就保持原位
+                        autoDockIfNeeded(size)
                     }
                 }
                 .onChange(of: size) { newSize in
@@ -131,14 +131,8 @@ struct FloatingMenuButton: View {
                 .onEnded { v in
                     if expanded { return }
                     withAnimation(.spring(duration: 0.3)) {
-                        // 判断拖到了左右哪一侧 → 吸边隐藏
-                        let screenWidth = UIScreen.main.bounds.width
-                        let currentX = pos.x
-                        if currentX < screenWidth / 2 {
-                            docked = true
-                        } else if currentX > screenWidth * 0.45 {
-                            docked = true
-                        }
+                        // 松手一律吸边：拖到屏幕哪半边就吸哪侧（用完即收，符合"不用时贴边"）
+                        docked = true
                         savePos()
                     }
                 }
@@ -174,6 +168,13 @@ struct FloatingMenuButton: View {
     private func collapseAndDock() {
         onToggle()  // expanded = false（父视图 withAnimation）
         withAnimation(.spring(duration: 0.3)) { docked = true }
+    }
+
+    /// 打开书签时自动吸边：若钮位置接近边缘，直接吸附
+    private func autoDockIfNeeded(_ size: CGSize) {
+        if isNearEdge(pos.x, size.width) {
+            withAnimation(.spring(duration: 0.3)) { docked = true }
+        }
     }
 }
 
