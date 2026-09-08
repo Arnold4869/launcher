@@ -7,7 +7,6 @@ struct SplitViewScreen: View {
     let top: Bookmark
     let bottom: Bookmark
     @Environment(\.dismiss) private var dismiss
-
     @State private var topFraction: Double = 0.5
     @State private var expanded = false
     @EnvironmentObject var wm: WindowManager
@@ -77,18 +76,16 @@ struct SplitViewScreen: View {
 
     private enum Half { case top, bottom }
 
-    /// 关闭一半：只剩另一半（分屏退出后全屏页显示保留的那半屏）
+    /// 关闭一半：保留的半屏转成全屏页（wm.open 复用已有 PageState 时浏览状态保留）
     private func closeHalf(_ half: Half) {
         savedFraction = 0.5
-        if half == .bottom {
-            // 拖到最下 = 只剩上半屏 → 直接退出分屏，回到上半屏的全屏页
-            wm.splitTop = nil
-            wm.splitBottom = nil
-        } else {
-            // 拖到最上 = 只剩下半屏 → 下半屏书签转正为全屏页内容
-            wm.splitTop = wm.splitBottom
-            wm.splitBottom = nil
-        }
+        let survivor = half == .bottom ? top : bottom
+        // 清分屏状态（LauncherApp zIndex3 层消失）+ dismiss 关掉 SplitFlowView 的 fullScreenCover
+        wm.splitTop = nil
+        wm.splitBottom = nil
+        dismiss()
+        // 保留的半屏转正为全屏页（如果它在 pages 里，直接全屏不重建；否则新开）
+        wm.open(survivor)
     }
 }
 
