@@ -256,7 +256,7 @@ struct FullscreenPage: View {
                         edgeSwipeHome: { wm.goHome() })
         }
         .overlay(alignment: .topLeading) {
-            // FAB 被隐藏时，左上角保留一个迷你主页胶囊（保证任何时候都能返回主页）
+            // 常驻返回主页胶囊（左上角，任何时候都可见可点）
             FabHiddenHomePill()
         }
         .overlay {
@@ -579,26 +579,26 @@ extension WKWebView {
 }
 
 
-// MARK: - FAB 隐藏时的保底返回主页入口
+// MARK: - 全屏/分屏页常驻「返回主页」胶囊（任何时候都可见可点，FAB 只是附加入口）
 struct FabHiddenHomePill: View {
-    @AppStorage("fabHidden") private var fabHidden = false
     @EnvironmentObject var wm: WindowManager
 
     var body: some View {
-        if fabHidden {
-            Button {
-                wm.goHome()
-            } label: {
+        Button {
+            wm.goHome()
+        } label: {
+            HStack(spacing: 5) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 30, height: 30)
-                    .background(.black.opacity(0.45), in: Circle())
+                    .font(.system(size: 14, weight: .bold))
+                Text("主页")
+                    .font(.footnote.bold())
             }
-            .padding(.leading, 12)
-            .padding(.top, 8)
-        } else {
-            EmptyView()
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .background(.black.opacity(0.5), in: Capsule())
         }
+        .padding(.leading, 16)
+        .padding(.top, 60)   // 避开状态栏/灵动岛
     }
 }

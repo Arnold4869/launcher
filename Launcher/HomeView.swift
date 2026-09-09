@@ -31,6 +31,26 @@ struct HomeView: View {
                 } else {
                     ScrollView {
                         LazyVGrid(columns: gridColumns, spacing: 14) {
+                            // 多任务入口卡（有打开页面时显示，像书签 tile 一样点进去切换）
+                            if !wm.pages.isEmpty {
+                                Button {
+                                    showTaskSwitcher = true
+                                } label: {
+                                    VStack(spacing: 8) {
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(Color.blue.opacity(0.12))
+                                                .frame(height: CGFloat(cardHeight))
+                                            Image(systemName: "square.on.square")
+                                                .font(.system(size: 30))
+                                                .foregroundStyle(.blue)
+                                        }
+                                        Text("多任务 (\(wm.pages.count))")
+                                            .font(.footnote)
+                                            .lineLimit(1)
+                                    }
+                                }
+                            }
                             ForEach(store.bookmarks) { bm in
                                 Button {
                                     wm.open(bm)
