@@ -392,6 +392,7 @@ struct PageWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, UIGestureRecognizerDelegate {
         weak var page: PageState? = nil
         var edgeSwipeHome: (() -> Void)? = nil
+        var onWebViewTap: (() -> Void)? = nil
         var clearRefreshObserver: NSObjectProtocol? = nil
 
         deinit {
