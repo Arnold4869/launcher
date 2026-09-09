@@ -19,9 +19,16 @@ struct TaskSwitcherView: View {
         NavigationStack {
             Group {
                 if wm.pages.isEmpty {
-                    ContentUnavailableView("没有打开的页面",
-                                           systemImage: "square.on.square.dashed",
-                                           description: Text("回到主页点书签即可新开页面"))
+                    VStack(spacing: 12) {
+                        Image(systemName: "square.on.square.dashed")
+                            .font(.system(size: 40))
+                            .foregroundStyle(.tertiary)
+                        Text("没有打开的页面")
+                            .font(.headline)
+                        Text("回到主页点书签即可新开页面")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(alignment: .top, spacing: 16) {
