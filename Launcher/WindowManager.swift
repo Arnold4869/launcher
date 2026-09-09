@@ -122,10 +122,20 @@ final class WindowManager: ObservableObject {
     /// 打开多任务时刷新全部页面快照；未挂载过的页面先补载初始 URL
     func refreshAllSnapshots() {
         for page in pages {
-            // 只为「还活着」的页面抓图；已释放的不再重建（避免读着书时内存被后台页吃满导致前台被回收）
-            if page.released { continue }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                page.captureSnapshot()
+            // force：即使该页正在前台（snapshotSuspended）也要抓，切换器要显示实时内容
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                page.captureSnapshot(force: true)
+            }
+            // 已释放（内存紧张时卸掉的后台页）→ 重新挂载并重载一次，保证卡片有内容
+            if page.released {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if let url = URL(string: page.bookmark.urlString) {
+                        page.webView.load(URLRequest(url: url))
+                    }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    page.captureSnapshot(force: true)
+                }
             }
         }
     }

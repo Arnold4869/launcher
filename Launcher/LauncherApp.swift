@@ -1,9 +1,19 @@
 import SwiftUI
+import AVFoundation
 
 @main
 struct LauncherApp: App {
     @StateObject private var store = BookmarkStore()
     @StateObject private var wm = WindowManager()
+
+    init() {
+        // 视频站点（抖音等）：允许静音开关开着时也出声
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        } catch {
+            // 忽略：拿不到音频会话也不影响网页加载
+        }
+    }
 
     var body: some Scene {
         WindowGroup {

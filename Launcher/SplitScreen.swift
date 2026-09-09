@@ -179,6 +179,9 @@ struct SplitWebView: UIViewRepresentable {
         } else {
             let config = WKWebViewConfiguration()
             config.websiteDataStore = WKWebsiteDataStore.default()
+            config.allowsInlineMediaPlayback = true
+            config.mediaTypesRequiringUserActionForPlayback = []
+            config.allowsPictureInPictureMediaPlayback = true
             let wv = WKWebView(frame: .zero, configuration: config)
             wv.allowsBackForwardNavigationGestures = true
             wv.pageZoom = bm.scale

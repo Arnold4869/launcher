@@ -17,6 +17,10 @@ final class PageState: Identifiable {
         if let heldWebView { return heldWebView }
         let config = WKWebViewConfiguration()
         config.websiteDataStore = WKWebsiteDataStore.default()
+        // 视频/音频站点（抖音、B站等）：内联播放 + 允许自动播放
+        config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
+        config.allowsPictureInPictureMediaPlayback = true
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.allowsBackForwardNavigationGestures = true
         heldWebView = wv
@@ -46,13 +50,36 @@ final class PageState: Identifiable {
     /// 正在前台全屏显示时不抓快照：截图会占用主线程，阅读翻页时可能被看成"刷一下"
     var snapshotSuspended = false
 
-    func captureSnapshot() {
-        guard webView.frame.width > 0, !snapshotSuspended else { return }
-        webView.takeSnapshot(with: nil) { [weak self] image, _ in
+    /// 后台页的 WebView 不在视图树里（frame 为 0 / 无 window），直接截图会失败 →
+    /// 先临时挂到窗口外挂区域截完再摘下，这是多任务卡片"很少显示预览"的主因
+    func captureSnapshot(force: Bool = false) {
+        guard !snapshotSuspended || force else { return }
+
+        let wv = webView
+        let needsTempMount = wv.window == nil || wv.frame.width <= 1
+        let savedSuperview = wv.superview
+        if needsTempMount, let window = UIApplication.shared
+            .connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .flatMap({ $0.windows })
+            .first(where: { $0.isKeyWindow }) {
+            wv.frame = CGRect(x: -10000, y: 0, width: 390, height: 844)
+            window.addSubview(wv)
+        }
+        defer {
+            if needsTempMount {
+                wv.removeFromSuperview()
+                if let savedSuperview { savedSuperview.addSubview(wv) }
+            }
+        }
+
+        let config = WKSnapshotConfiguration()
+        config.rect = CGRect(x: 0, y: 0, width: 390, height: 844)
+        wv.takeSnapshot(with: config) { [weak self] image, _ in
             guard let self, let image else { return }
             DispatchQueue.main.async {
                 self.snapshot = image
-                self.pageTitle = self.webView.title ?? ""
+                self.pageTitle = wv.title ?? self.bookmark.name
             }
         }
     }
