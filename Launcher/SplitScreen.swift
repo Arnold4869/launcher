@@ -12,6 +12,7 @@ struct SplitViewScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var topFraction: Double = 0.5
     @State private var expanded = false
+    @State private var showTaskSwitcher = false
     @EnvironmentObject var wm: WindowManager
     @AppStorage("splitFraction") private var savedFraction: Double = 0.5
     var body: some View {
@@ -75,6 +76,19 @@ struct SplitViewScreen: View {
                 wm.splitTopPage = nil
                 wm.splitBottomPage = nil
             }
+            .onReceive(NotificationCenter.default.publisher(for: .fabActionTasks)) { _ in
+                expanded = false; showTaskSwitcher = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .fabActionClearCache)) { _ in
+                // 分屏页清缓存 = 上下两半都清
+                expanded = false
+                if let t = wm.splitTop { NotificationCenter.default.post(name: .launcherClearRefresh, object: t.id) }
+                if let b = wm.splitBottom { NotificationCenter.default.post(name: .launcherClearRefresh, object: b.id) }
+            }
+        }
+        .sheet(isPresented: $showTaskSwitcher) {
+            TaskSwitcherView()
+                .environmentObject(wm)
         }
         .onAppear {
             // 每次进入分屏都初始化为标准 55/45 分割（上次关一半残留的 0/1 不再带进来）
@@ -111,6 +125,11 @@ struct SplitWebView: UIViewRepresentable {
     var page: PageState? = nil
 
     final class Coordinator: NSObject, WKNavigationDelegate {
+        var clearRefreshObserver: NSObjectProtocol? = nil
+        deinit {
+            if let obs = clearRefreshObserver { NotificationCenter.default.removeObserver(obs) }
+        }
+
         func webView(_ webView: WKWebView,
                      didReceive challenge: URLAuthenticationChallenge,
                      completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
@@ -132,23 +151,40 @@ struct SplitWebView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> WKWebView {
+        let fresh: WKWebView
         if let page {
             // 复用常驻实例：重新接上 delegate（Basic Auth / 登录填充），不重载页面
-            let wv = page.webView
-            wv.navigationDelegate = context.coordinator
-            wv.currentBookmark = bm
-            return wv
+            fresh = page.webView
+            // 摘掉全屏路径挂的边缘手势（target 已随旧 Coordinator 释放，避免悬垂）
+            for g in fresh.gestureRecognizers ?? [] where g is UIScreenEdgePanGestureRecognizer {
+                fresh.removeGestureRecognizer(g)
+            }
+        } else {
+            let config = WKWebViewConfiguration()
+            config.websiteDataStore = WKWebsiteDataStore.default()
+            let wv = WKWebView(frame: .zero, configuration: config)
+            wv.allowsBackForwardNavigationGestures = true
+            wv.pageZoom = bm.scale
+            if bm.desktopUA { wv.customUserAgent = PageWebView.desktopUserAgent }
+            if let url = URL(string: bm.urlString) { wv.load(URLRequest(url: url)) }
+            fresh = wv
         }
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = WKWebsiteDataStore.default()
-        let wv = WKWebView(frame: .zero, configuration: config)
-        wv.navigationDelegate = context.coordinator
-        wv.allowsBackForwardNavigationGestures = true
-        wv.pageZoom = bm.scale
-        if bm.desktopUA { wv.customUserAgent = PageWebView.desktopUserAgent }
-        wv.currentBookmark = bm
-        if let url = URL(string: bm.urlString) { wv.load(URLRequest(url: url)) }
-        return wv
+        fresh.navigationDelegate = context.coordinator
+        fresh.currentBookmark = bm
+        // 清缓存刷新（分屏 FAB 触发时上下两半都要响应）
+        context.coordinator.clearRefreshObserver = NotificationCenter.default.addObserver(
+            forName: .launcherClearRefresh, object: nil, queue: .main) { [weak fresh] note in
+            guard let targetID = note.object as? UUID, let fresh, fresh.currentBookmark.id == targetID else { return }
+            guard let url = URL(string: bm.urlString), let host = url.host else { fresh.reload(); return }
+            let types = WKWebsiteDataStore.allWebsiteDataTypes()
+            WKWebsiteDataStore.default().fetchDataRecords(ofTypes: types) { records in
+                let matching = records.filter { $0.displayName.contains(host) }
+                WKWebsiteDataStore.default().removeData(ofTypes: types, for: matching) {
+                    DispatchQueue.main.async { fresh.reload() }
+                }
+            }
+        }
+        return fresh
     }
     func updateUIView(_ wv: WKWebView, context: Context) {}
     func makeCoordinator() -> Coordinator { Coordinator(bm) }
@@ -171,6 +207,8 @@ struct SplitLabel: View {
 /// 分屏流程：先选下半屏书签（后台已打开的页面排前面，浏览状态保留），选中后切分屏
 struct SplitFlowView: View {
     let top: Bookmark
+    /// top 书签若已是打开页，复用其 WebView
+    var topPage: PageState? = nil
     @ObservedObject var store: BookmarkStore
     @EnvironmentObject var wm: WindowManager
     @State private var bottom: Bookmark?
@@ -179,7 +217,7 @@ struct SplitFlowView: View {
 
     var body: some View {
         if let bottom {
-            SplitViewScreen(top: top, bottom: bottom, bottomPage: bottomPage)
+            SplitViewScreen(top: top, bottom: bottom, topPage: topPage, bottomPage: bottomPage)
         } else {
             NavigationStack {
                 ScrollView {
@@ -236,6 +274,8 @@ struct SplitFlowView: View {
 /// 分屏选择器（从全屏页悬浮钮进入）：选下半屏书签 → 关全屏 → 弹分屏
 struct SplitPickerView: View {
     let top: Bookmark
+    /// 发起分屏的页面（若它本身是已打开页，进分屏时复用其 WebView）
+    var topPage: PageState? = nil
     @EnvironmentObject var store: BookmarkStore
     @EnvironmentObject var wm: WindowManager
     @Environment(\.dismiss) private var dismiss
@@ -260,7 +300,7 @@ struct SplitPickerView: View {
                                 Button {
                                     wm.goHome()
                                     wm.splitTop = top
-                                    wm.splitTopPage = nil
+                                    wm.splitTopPage = topPage
                                     wm.splitBottom = page.bookmark
                                     wm.splitBottomPage = page
                                     dismiss()
@@ -284,7 +324,7 @@ struct SplitPickerView: View {
                         Button {
                             wm.goHome()
                             wm.splitTop = top
-                            wm.splitTopPage = nil
+                            wm.splitTopPage = topPage
                             wm.splitBottom = bm
                             wm.splitBottomPage = nil
                             dismiss()
@@ -309,5 +349,6 @@ struct SplitPickerView: View {
 struct SplitPair: Identifiable {
     let id = UUID()
     let top: Bookmark
-    let bottom: Bookmark
+    var topPage: PageState? = nil
+    var bottom: Bookmark? = nil
 }

@@ -81,8 +81,14 @@ final class WindowManager: ObservableObject {
     }
 
     /// 把某后台页设为分屏一半：top=true 设为上半屏。已在分屏里则换掉那半
-    func setPageForSplit(_ bm: Bookmark, top: Bool) {
-        if top { splitTop = bm } else { splitBottom = bm }
+    func setPageForSplit(_ bm: Bookmark, top: Bool, page: PageState? = nil) {
+        if top {
+            splitTop = bm
+            splitTopPage = page
+        } else {
+            splitBottom = bm
+            splitBottomPage = page
+        }
     }
 
     /// 两半都齐 → true（供调用方判断能否直接进分屏）

@@ -283,7 +283,7 @@ struct FullscreenPage: View {
                 .environmentObject(store)
         }
         .sheet(isPresented: $showSplitPicker) {
-            SplitPickerView(top: page.bookmark)
+            SplitPickerView(top: page.bookmark, topPage: page)
                 .environmentObject(store)
                 .environmentObject(wm)
         }

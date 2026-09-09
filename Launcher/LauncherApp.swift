@@ -35,6 +35,7 @@ struct LauncherApp: App {
                     SplitViewScreen(top: top, bottom: bottom,
                                     topPage: wm.splitTopPage, bottomPage: wm.splitBottomPage)
                         .environmentObject(wm)
+                        .environmentObject(store)
                         .zIndex(3)
                 }
             }

@@ -14,6 +14,7 @@ struct TaskSwitcherView: View {
     @Environment(\.dismiss) private var dismiss
     /// 待配对的第一半（选了上半屏等待下半屏时非 nil）
     @State private var pendingTop: Bookmark?
+    @State private var pendingTopPage: PageState?
 
     var body: some View {
         NavigationStack {
@@ -104,7 +105,7 @@ struct TaskSwitcherView: View {
             // 关闭
             Button {
                 withAnimation { wm.closePage(page.id) }
-                if pendingTop?.id == page.bookmark.id { pendingTop = nil }
+                if pendingTop?.id == page.bookmark.id { pendingTop = nil; pendingTopPage = nil }
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.secondary)
@@ -117,30 +118,50 @@ struct TaskSwitcherView: View {
 
     private func handleMainTap(_ page: PageState) {
         if let top = pendingTop {
-            // 已有上半屏在等待 → 这个页面补为下半屏，进分屏
-            guard page.bookmark.id != top.id else { pendingTop = nil; return }
-            wm.setPageForSplit(top, top: true)
-            wm.setPageForSplit(page.bookmark, top: false)
+            // 再点等待中的那半 = 取消配对
+            guard page.bookmark.id != top.id else { pendingTop = nil; pendingTopPage = nil; return }
+            wm.setPageForSplit(top, top: true, page: pendingTopPage)
+            wm.setPageForSplit(page.bookmark, top: false, page: page)
             pendingTop = nil
+            pendingTopPage = nil
             // 回主页再进分屏：不清 fullscreenID 会残留全屏层盖住分屏
             wm.goHome()
-            dismiss()
+            dismissAfter { }
         } else {
-            wm.fullscreenID = page.id
-            dismiss()
+            dismissAfter {
+                exitSplitIfNeeded()
+                wm.fullscreenID = page.id
+            }
         }
     }
 
     private func handleSplitTap(_ bm: Bookmark) {
         if let top = pendingTop {
-            guard bm.id != top.id else { return }
-            wm.setPageForSplit(top, top: true)
-            wm.setPageForSplit(bm, top: false)
+            // 再点等待中的那半 = 取消配对
+            guard bm.id != top.id else { pendingTop = nil; pendingTopPage = nil; return }
+            wm.setPageForSplit(top, top: true, page: pendingTopPage)
+            wm.setPageForSplit(bm, top: false, page: wm.pages.first { $0.bookmark.id == bm.id })
             pendingTop = nil
+            pendingTopPage = nil
             wm.goHome()
-            dismiss()
+            dismissAfter { }
         } else {
             pendingTop = bm
+            pendingTopPage = wm.pages.first { $0.bookmark.id == bm.id }
         }
+    }
+
+    /// 先 dismiss 再改全局状态：多任务 sheet 若由全屏页呈现，先摘 sheet 再切页，避免 present/dismiss 竞态
+    private func dismissAfter(_ apply: @escaping () -> Void) {
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: apply)
+    }
+
+    /// 从多任务切页/进分屏前，先退出当前分屏（否则全屏页被分屏层盖住不可见）
+    private func exitSplitIfNeeded() {
+        wm.splitTop = nil
+        wm.splitBottom = nil
+        wm.splitTopPage = nil
+        wm.splitBottomPage = nil
     }
 }

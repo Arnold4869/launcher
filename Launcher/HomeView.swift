@@ -44,7 +44,7 @@ struct HomeView: View {
                                         Label("编辑", systemImage: "pencil")
                                     }
                                     Button {
-                                        splitPair = SplitPair(top: bm, bottom: bm)
+                                        splitPair = SplitPair(top: bm, topPage: wm.pages.first { $0.bookmark.id == bm.id })
                                     } label: {
                                         Label("分屏打开", systemImage: "rectangle.split.2x1")
                                     }
@@ -123,7 +123,7 @@ struct HomeView: View {
                     .environmentObject(wm)
             }
             .fullScreenCover(item: $splitPair) { pair in
-                SplitFlowView(top: pair.top, store: store)
+                SplitFlowView(top: pair.top, topPage: pair.topPage, store: store)
             }
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                 if case .success(let url) = result {
