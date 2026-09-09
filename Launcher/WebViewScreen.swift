@@ -504,7 +504,8 @@ extension WKWebView {
             if (form) {
               userEl = form.querySelector("input[type=email], input[type=text], input[type=tel], input:not([type])");
             }
-            if (!userEl) {
+            if (!userEl && user) {
+              // 无用户名时跳过用户名框检测，避免误命中页面其它输入框（如主面板的服务名框）
               userEl = document.querySelector("input[type=email], input[type=text], input[type=tel], input[name*=user i], input[name*=account i], input[name*=phone i], input[id*=user i]");
             }
             if (!userEl && user) {
