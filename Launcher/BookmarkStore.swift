@@ -44,6 +44,44 @@ struct Bookmark: Identifiable, Codable, Hashable {
     var basicAuthPass: String = "" // HTTP Basic Auth 密码
     var loginUser: String = ""     // 网页登录表单自动填充用户名（空 = 不启用）
     var loginPass: String = ""     // 网页登录表单自动填充密码
+    var autoSubmit: Bool = true    // 自动填充后自动提交登录（回车/点登录钮）
+
+    // 自定义解码：旧 json 缺新字段时用默认值，避免 decode 整体失败丢书签
+    init(id: UUID = UUID(), name: String = "", urlString: String = "https://", icon: String = "🌐",
+         colorIndex: Int = CardPalette.randomIndex(), scale: Double = 1.0, fontAdjust: Double = 0,
+         desktopUA: Bool = false, basicAuthUser: String = "", basicAuthPass: String = "",
+         loginUser: String = "", loginPass: String = "", autoSubmit: Bool = true) {
+        self.id = id
+        self.name = name
+        self.urlString = urlString
+        self.icon = icon
+        self.colorIndex = colorIndex
+        self.scale = scale
+        self.fontAdjust = fontAdjust
+        self.desktopUA = desktopUA
+        self.basicAuthUser = basicAuthUser
+        self.basicAuthPass = basicAuthPass
+        self.loginUser = loginUser
+        self.loginPass = loginPass
+        self.autoSubmit = autoSubmit
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        urlString = try c.decodeIfPresent(String.self, forKey: .urlString) ?? "https://"
+        icon = try c.decodeIfPresent(String.self, forKey: .icon) ?? "🌐"
+        colorIndex = try c.decodeIfPresent(Int.self, forKey: .colorIndex) ?? CardPalette.randomIndex()
+        scale = try c.decodeIfPresent(Double.self, forKey: .scale) ?? 1.0
+        fontAdjust = try c.decodeIfPresent(Double.self, forKey: .fontAdjust) ?? 0
+        desktopUA = try c.decodeIfPresent(Bool.self, forKey: .desktopUA) ?? false
+        basicAuthUser = try c.decodeIfPresent(String.self, forKey: .basicAuthUser) ?? ""
+        basicAuthPass = try c.decodeIfPresent(String.self, forKey: .basicAuthPass) ?? ""
+        loginUser = try c.decodeIfPresent(String.self, forKey: .loginUser) ?? ""
+        loginPass = try c.decodeIfPresent(String.self, forKey: .loginPass) ?? ""
+        autoSubmit = try c.decodeIfPresent(Bool.self, forKey: .autoSubmit) ?? true
+    }
 }
 
 final class BookmarkStore: ObservableObject {

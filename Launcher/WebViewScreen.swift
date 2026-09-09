@@ -480,6 +480,7 @@ extension WKWebView {
     func injectLoginFill() {
         let bm = currentBookmark
         guard !bm.loginUser.isEmpty || !bm.loginPass.isEmpty else { return }
+        let autoSubmit = bm.autoSubmit
         let user = bm.loginUser
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
@@ -495,7 +496,7 @@ extension WKWebView {
         // 多次尝试：SPA 页面登录框可能延迟渲染，1s/3s/6s 各试一次
         let js = """
         (function(){
-          var user = '\(user)', pass = '\(pass)';
+          var user = '\(user)', pass = '\(pass)', autoSubmit = \(autoSubmit ? "true" : "false");
           function fill() {
             var pw = document.querySelector("input[type=password]");
             if (!pw) return false;
@@ -526,6 +527,7 @@ extension WKWebView {
             if (pw.type !== "password") { try { pw.type = "password"; } catch(e) {} }
             pw.setAttribute("autocomplete", "off");
             if (!changed) return false;
+            if (!autoSubmit) return true;
             // 自动提交：填入成功后模拟回车/点登录按钮（仅首次，sessionStorage 防账密错误死循环）
             if (!sessionStorage.getItem("__launcherAutofillSubmitted")) {
               sessionStorage.setItem("__launcherAutofillSubmitted", "1");

@@ -16,6 +16,7 @@ struct BookmarkEditView: View {
     @State private var authPass: String = ""
     @State private var loginUser: String = ""
     @State private var loginPass: String = ""
+    @State private var autoSubmit: Bool = true
 
     var body: some View {
         NavigationStack {
@@ -83,6 +84,11 @@ struct BookmarkEditView: View {
                 } footer: {
                     Text("页面检测到登录表单时自动填入；账号可从 Bitwarden 复制粘贴")
                 }
+                Section {
+                    Toggle("填入后自动登录", isOn: $autoSubmit)
+                } footer: {
+                    Text("开启后自动填充完成即模拟回车/点击登录按钮；关闭则填入后等你手动提交")
+                }
             }
             .navigationTitle(bookmark == nil ? "添加书签" : "编辑书签")
             .navigationBarTitleDisplayMode(.inline)
@@ -113,6 +119,7 @@ struct BookmarkEditView: View {
         authPass = bm.basicAuthPass
         loginUser = bm.loginUser
         loginPass = bm.loginPass
+        autoSubmit = bm.autoSubmit
     }
 
     private func save() {
@@ -132,7 +139,8 @@ struct BookmarkEditView: View {
             basicAuthUser: authUser,
             basicAuthPass: authPass,
             loginUser: loginUser,
-            loginPass: loginPass
+            loginPass: loginPass,
+            autoSubmit: autoSubmit
         )
         if let idx = store.bookmarks.firstIndex(where: { $0.id == bm.id }) {
             store.bookmarks[idx] = bm
