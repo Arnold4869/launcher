@@ -473,7 +473,7 @@ extension Notification.Name {
 }
 
 // 网页登录表单自动填充：页面加载后检测登录表单（input[type=password]），自动填入书签存的账密。
-// 不自动点登录按钮——填上后用户确认提交，账密错误也不会死循环。
+// 自动提交：填入后模拟回车/点登录按钮，sessionStorage 标记保证一次会话只提交一次（防账密错误死循环）。
 // 隐私处理：已填的密码框强制 type=password 圆点显示（防个别网站设成 text 明文）。
 // 注意：SplitScreen.swift 里的 SplitWebView 和本文件的 PageWebView 共用这个 extension。
 extension WKWebView {
@@ -525,6 +525,29 @@ extension WKWebView {
             // 隐私：无论网站怎么设置，密码框强制按圆点显示
             if (pw.type !== "password") { try { pw.type = "password"; } catch(e) {} }
             pw.setAttribute("autocomplete", "off");
+            if (!changed) return false;
+            // 自动提交：填入成功后模拟回车/点登录按钮（仅首次，sessionStorage 防账密错误死循环）
+            if (!sessionStorage.getItem("__launcherAutofillSubmitted")) {
+              sessionStorage.setItem("__launcherAutofillSubmitted", "1");
+              setTimeout(function(){
+                var fm = pw.form || pw.closest("form");
+                if (fm) {
+                  var btn = fm.querySelector("button[type=submit], input[type=submit]");
+                  if (!btn) {
+                    btn = Array.prototype.find.call(fm.querySelectorAll("button"), function(b){
+                      return /登录|登 录|login|sign ?in|确定/i.test(b.textContent || "");
+                    });
+                  }
+                  if (btn) { btn.click(); return; }
+                  if (typeof fm.requestSubmit === "function") { fm.requestSubmit(); return; }
+                }
+                // 无 form 的页面（如激活台）：对密码框派发 Enter 键事件
+                var opt = {key:"Enter", code:"Enter", keyCode:13, which:13, bubbles:true, cancelable:true};
+                pw.dispatchEvent(new KeyboardEvent("keydown", opt));
+                pw.dispatchEvent(new KeyboardEvent("keypress", opt));
+                pw.dispatchEvent(new KeyboardEvent("keyup", opt));
+              }, 150);
+            }
             return changed;
           }
           [200, 1000, 3000, 6000].forEach(function(t){ setTimeout(fill, t); });
