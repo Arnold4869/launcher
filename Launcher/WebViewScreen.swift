@@ -630,10 +630,12 @@ struct PageBottomBarLayer: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            if visible {
-                PageBottomBar(mode: mode, currentPage: currentPage)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+            // 常驻挂载：隐藏 = 移出屏幕 + 透明 + 不响应点击，视图不销毁
+            // 这样挂在本视图上的 sheet（多任务/分屏/设置等）不会被「自动隐藏」连带关掉
+            PageBottomBar(mode: mode, currentPage: currentPage)
+                .offset(y: visible ? 0 : 140)
+                .opacity(visible ? 1 : 0)
+                .allowsHitTesting(visible)
         }
         .animation(.easeInOut(duration: 0.2), value: visible)
         .onAppear { scheduleHide() }

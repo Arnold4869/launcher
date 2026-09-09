@@ -1,11 +1,12 @@
 import Foundation
 import WebKit
 import UIKit
+import Combine
 
 /// 一个打开的页面（常驻 WebView，最多 4 个）
 /// webView 实例缓存在这里：SwiftUI 视图树卸载只把它从父视图摘下，实例由本类强持有不销毁，
 /// 后台/全屏/分屏之间切换 = 同一 WKWebView 在不同容器间搬移，浏览状态全程保留。
-final class PageState: Identifiable {
+final class PageState: ObservableObject, Identifiable {
     let id = UUID()
     let bookmark: Bookmark
     /// 多任务卡片实时缩略图（didFinish 导航后刷新）
@@ -57,27 +58,25 @@ final class PageState: Identifiable {
 
         let wv = webView
         let needsTempMount = wv.window == nil || wv.frame.width <= 1
-        let savedSuperview = wv.superview
-        if needsTempMount, let window = UIApplication.shared
-            .connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .flatMap({ $0.windows })
-            .first(where: { $0.isKeyWindow }) {
-            wv.frame = CGRect(x: -10000, y: 0, width: 390, height: 844)
-            window.addSubview(wv)
-        }
-        defer {
-            if needsTempMount {
-                wv.removeFromSuperview()
-                if let savedSuperview { savedSuperview.addSubview(wv) }
+        let bounds = UIScreen.main.bounds
+        if needsTempMount {
+            // 后台页不在视图树：临时挂到屏幕外（负坐标，不可见）再截，截完摘掉
+            wv.frame = CGRect(x: -bounds.width, y: 0, width: bounds.width, height: bounds.height)
+            if let window = UIApplication.shared
+                .connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .flatMap({ $0.windows })
+                .first(where: { $0.isKeyWindow }) {
+                window.addSubview(wv)
             }
         }
-
-        let config = WKSnapshotConfiguration()
-        config.rect = CGRect(x: 0, y: 0, width: 390, height: 844)
-        wv.takeSnapshot(with: config) { [weak self] image, _ in
-            guard let self, let image else { return }
+        // takeSnapshot 是异步的：必须在回调里（截图完成后）才摘离屏挂载，否则图截到一半就没了
+        wv.takeSnapshot(with: nil) { [weak self] image, _ in
             DispatchQueue.main.async {
+                guard let self, let image else { return }
+                if needsTempMount {
+                    wv.removeFromSuperview()
+                }
                 self.snapshot = image
                 self.pageTitle = wv.title ?? self.bookmark.name
             }
