@@ -13,9 +13,21 @@ struct SplitViewScreen: View {
     @State private var topFraction: Double = 0.5
     @State private var expanded = false
     @State private var showTaskSwitcher = false
+    @State private var bottomBarVisible = true
+    @State private var barHideTask: DispatchWorkItem? = nil
     @EnvironmentObject var wm: WindowManager
     @EnvironmentObject var store: BookmarkStore
     @AppStorage("splitFraction") private var savedFraction: Double = 0.5
+    /// 3 秒无操作自动隐藏底部导航栏
+    private func scheduleBarHide() {
+        barHideTask?.cancel()
+        let task = DispatchWorkItem {
+            withAnimation(.easeInOut(duration: 0.25)) { bottomBarVisible = false }
+        }
+        barHideTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: task)
+    }
+
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: 0) {
@@ -65,11 +77,26 @@ struct SplitViewScreen: View {
         .ignoresSafeArea()
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-                .safeAreaInset(edge: .bottom) {
-            // 底部透明导航栏：主页 / 多任务 / 分屏（分屏页沿用，分屏钮重新选下半屏）
-            PageBottomBar()
-                .environmentObject(wm)
-                .environmentObject(store)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+            if bottomBarVisible {
+                PageBottomBar()
+                    .environmentObject(wm)
+                    .environmentObject(store)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .onAppear { scheduleBarHide() }
+            } else {
+                Color.clear.frame(height: 0)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if !bottomBarVisible {
+                Color.clear
+                    .frame(height: 28)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.2)) { bottomBarVisible = true }
+                    }
+            }
         }
         .overlay {
             // 可拖动 + 吸边隐藏悬浮钮（与全屏页共用位置）

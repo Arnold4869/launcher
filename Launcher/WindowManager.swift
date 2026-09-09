@@ -111,6 +111,19 @@ final class WindowManager: ObservableObject {
         UserDefaults.standard.set(fsID, forKey: Self.fullscreenKey)
     }
 
+    /// 打开多任务时刷新全部页面快照；未挂载过的页面先补载初始 URL
+    func refreshAllSnapshots() {
+        for page in pages {
+            _ = page.webView   // 确保实例已建
+            if page.webView.url == nil, let url = URL(string: page.bookmark.urlString) {
+                page.webView.load(URLRequest(url: url))
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                page.captureSnapshot()
+            }
+        }
+    }
+
     /// App 启动时调用：按保存的书签 ID 恢复后台页面
     func restorePages(store: BookmarkStore) {
         guard pages.isEmpty, let ids = UserDefaults.standard.stringArray(forKey: Self.pagesKey), !ids.isEmpty else { return }

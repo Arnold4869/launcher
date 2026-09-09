@@ -238,6 +238,8 @@ struct FullscreenPage: View {
     @State private var showSplitPicker = false
     @State private var showTaskSwitcher = false
     @State private var expanded = false
+    @State private var bottomBarVisible = true
+    @State private var barHideTask: DispatchWorkItem? = nil
     @State private var zoom: Double
     @State private var fontAdjust: Double
     @State private var desktopUA: Bool
@@ -248,6 +250,16 @@ struct FullscreenPage: View {
         _zoom = State(initialValue: page.bookmark.scale)
         _fontAdjust = State(initialValue: page.bookmark.fontAdjust)
         _desktopUA = State(initialValue: page.bookmark.desktopUA)
+    }
+
+    /// 3 秒无操作自动隐藏底部导航栏
+    private func scheduleBarHide() {
+        barHideTask?.cancel()
+        let task = DispatchWorkItem {
+            withAnimation(.easeInOut(duration: 0.25)) { bottomBarVisible = false }
+        }
+        barHideTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: task)
     }
 
     var body: some View {
@@ -277,11 +289,29 @@ struct FullscreenPage: View {
                 expanded = false; showQuickSettings = true
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            // 底部透明导航栏：主页 / 多任务 / 分屏
-            PageBottomBar(currentPage: page)
-                .environmentObject(wm)
-                .environmentObject(store)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            // 底部透明导航栏：网页操作时自动隐藏，点屏幕底部区域唤出（3 秒后自动再隐藏）
+            if bottomBarVisible {
+                PageBottomBar(currentPage: page)
+                    .environmentObject(wm)
+                    .environmentObject(store)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .onAppear { scheduleBarHide() }
+            } else {
+                Color.clear.frame(height: 0)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            // 底部唤出热区（导航栏隐藏时才启用）
+            if !bottomBarVisible {
+                Color.clear
+                    .frame(height: 28)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.2)) { bottomBarVisible = true }
+                    }
+                    .allowsHitTesting(true)
+            }
         }
         .sheet(isPresented: $showQuickSettings) {
             QuickSettingsView(bookmarkID: page.bookmark.id,

@@ -30,24 +30,33 @@ struct TaskSwitcherView: View {
                             .foregroundStyle(.secondary)
                     }
                 } else {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: 16) {
-                            // 新开页面卡片（回主页选书签）
-                            newPageCard
-                            // 已打开页面：实时快照卡片
-                            ForEach(wm.pages) { page in
-                                pageCard(page)
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(alignment: .top, spacing: 16) {
+                                // 新开页面卡片（回主页选书签）
+                                newPageCard
+                                // 已打开页面：实时快照卡片
+                                ForEach(wm.pages) { page in
+                                    pageCard(page)
+                                        .id(page.id)
+                                }
+                            }
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 32)
+                        }
+                        .onAppear {
+                            // 从哪个页面进来就定位到哪张卡片
+                            if let cur = wm.pages.first(where: { $0.id == wm.fullscreenID }) {
+                                proxy.scrollTo(cur.id, anchor: .center)
                             }
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 32)
                     }
                 }
             }
             .background(Color(.systemGroupedBackground))
             .onAppear {
                 // 打开切换器时刷新所有页面快照（显示实时内容）
-                for p in wm.pages { p.captureSnapshot() }
+                wm.refreshAllSnapshots()
             }
             .navigationTitle("多任务")
             .navigationBarTitleDisplayMode(.inline)
