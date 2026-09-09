@@ -255,6 +255,10 @@ struct FullscreenPage: View {
             PageWebView(page: page, zoom: zoom, fontAdjust: fontAdjust, desktopUA: desktopUA,
                         edgeSwipeHome: { wm.goHome() })
         }
+        .overlay(alignment: .topLeading) {
+            // FAB 被隐藏时，左上角保留一个迷你主页胶囊（保证任何时候都能返回主页）
+            FabHiddenHomePill()
+        }
         .overlay {
             // 可拖动 + 自动吸边隐藏的悬浮钮（位置持久化，跟主屏共用）
             FloatingMenuButton(expanded: expanded, onToggle: {
@@ -465,7 +469,11 @@ struct PageWebView: UIViewRepresentable {
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator {
+        let c = Coordinator()
+        c.page = page
+        return c
+    }
 
     static let desktopUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
 }
@@ -566,5 +574,30 @@ extension WKWebView {
         })();
         """
         evaluateJavaScript(js, completionHandler: nil)
+    }
+}
+
+
+// MARK: - FAB 隐藏时的保底返回主页入口
+struct FabHiddenHomePill: View {
+    @AppStorage("fabHidden") private var fabHidden = false
+    @EnvironmentObject var wm: WindowManager
+
+    var body: some View {
+        if fabHidden {
+            Button {
+                wm.goHome()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(.black.opacity(0.45), in: Circle())
+            }
+            .padding(.leading, 12)
+            .padding(.top, 8)
+        } else {
+            EmptyView()
+        }
     }
 }

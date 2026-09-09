@@ -64,6 +64,9 @@ struct SplitViewScreen: View {
         .ignoresSafeArea()
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+        .overlay(alignment: .topLeading) {
+            FabHiddenHomePill()
+        }
         .overlay {
             // 可拖动 + 吸边隐藏悬浮钮（与全屏页共用位置）
             FloatingMenuButton(expanded: expanded, onToggle: {
@@ -145,7 +148,9 @@ struct SplitWebView: UIViewRepresentable {
         }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation) {
             webView.injectLoginFill()
+            page?.captureSnapshot()
         }
+        weak var page: PageState? = nil
         let bm: Bookmark
         init(_ bm: Bookmark) { self.bm = bm }
     }
@@ -171,6 +176,7 @@ struct SplitWebView: UIViewRepresentable {
         }
         fresh.navigationDelegate = context.coordinator
         fresh.currentBookmark = bm
+        context.coordinator.page = page
         // 清缓存刷新（分屏 FAB 触发时上下两半都要响应）
         context.coordinator.clearRefreshObserver = NotificationCenter.default.addObserver(
             forName: .launcherClearRefresh, object: nil, queue: .main) { [weak fresh] note in
