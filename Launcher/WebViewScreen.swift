@@ -20,7 +20,8 @@ struct PageHost: View {
                     .frame(width: geo.size.width, height: geo.size.height)
                     .transition(.opacity)
             }
-            // 后台保留，WebView 不销毁
+            // 后台页不挂载视图，但 WKWebView 实例缓存在 PageState 里不销毁，
+            // 重新打开 = 同一实例重新挂载，浏览状态/登录态全程保留。
         }
     }
 }
@@ -233,7 +234,6 @@ struct FullscreenPage: View {
     let page: PageState
     @ObservedObject var wm: WindowManager
     @EnvironmentObject var store: BookmarkStore
-
     @State private var showQuickSettings = false
     @State private var showSplitPicker = false
     @State private var showTaskSwitcher = false
@@ -402,12 +402,9 @@ struct PageWebView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = WKWebsiteDataStore.default()
-
-        let webView = WKWebView(frame: .zero, configuration: config)
+        // 复用 PageState 缓存的 WKWebView 实例（后台/全屏/分屏间搬移不销毁）
+        let webView = page.webView
         webView.navigationDelegate = context.coordinator
-        webView.allowsBackForwardNavigationGestures = true
         webView.pageZoom = zoom
         webView.currentBookmark = page.bookmark
         context.coordinator.edgeSwipeHome = edgeSwipeHome
@@ -432,7 +429,7 @@ struct PageWebView: UIViewRepresentable {
             webView.customUserAgent = PageWebView.desktopUserAgent
         }
 
-        if edgeSwipeHome != nil {
+        if edgeSwipeHome != nil && !(webView.gestureRecognizers ?? []).contains(where: { $0 is UIScreenEdgePanGestureRecognizer }) {
             let edgeGesture = UIScreenEdgePanGestureRecognizer(
                 target: context.coordinator, action: #selector(Coordinator.edgeSwiped))
             edgeGesture.edges = .left
@@ -440,10 +437,14 @@ struct PageWebView: UIViewRepresentable {
             webView.addGestureRecognizer(edgeGesture)
         }
 
-        if let url = URL(string: page.bookmark.urlString) {
+        // 首次创建才加载初始 URL；复用实例（后台/分屏搬回）保留当前页面不重载
+        let isFirstLoad = webView.url == nil
+        if isFirstLoad, let url = URL(string: page.bookmark.urlString) {
             webView.load(URLRequest(url: url))
         }
-        webView.injectLoginFill()
+        if isFirstLoad {
+            webView.injectLoginFill()
+        }
         return webView
     }
 

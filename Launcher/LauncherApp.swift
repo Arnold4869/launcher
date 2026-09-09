@@ -32,7 +32,8 @@ struct LauncherApp: App {
                 }
 
                 if let top = wm.splitTop, let bottom = wm.splitBottom {
-                    SplitViewScreen(top: top, bottom: bottom)
+                    SplitViewScreen(top: top, bottom: bottom,
+                                    topPage: wm.splitTopPage, bottomPage: wm.splitBottomPage)
                         .environmentObject(wm)
                         .zIndex(3)
                 }

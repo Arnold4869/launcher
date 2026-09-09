@@ -10,6 +10,9 @@ final class WindowManager: ObservableObject {
     /// 分屏状态（经悬浮钮「分屏」进入）
     @Published var splitTop: Bookmark?
     @Published var splitBottom: Bookmark?
+    /// 对应半屏的后台 PageState（有则复用常驻 WebView）
+    @Published var splitTopPage: PageState?
+    @Published var splitBottomPage: PageState?
     @Published var floatingPos: CGPoint = CGPoint(x: UIScreen.main.bounds.width - 90, y: 160)
     @Published var floatingWidth: CGFloat = 120
     // 默认高宽比 = 屏幕比例
@@ -22,7 +25,13 @@ final class WindowManager: ObservableObject {
             return
         }
         if pages.count >= 4 {
-            if let victim = pages.first(where: { $0.id != fullscreenID && $0.id != floatingID }) {
+            // 优先关悬浮窗里的（不可见且可重建），再关最早的其它未显示页
+            if let fid = floatingID {
+                pages.removeAll { $0.id == fid }
+                floatingID = nil
+            }
+            if pages.count >= 4,
+               let victim = pages.first(where: { $0.id != fullscreenID }) {
                 pages.removeAll { $0.id == victim.id }
             }
         }
@@ -54,7 +63,19 @@ final class WindowManager: ObservableObject {
     }
 
     func closePage(_ id: UUID) {
-        pages.removeAll { $0.id == id }
+        if let idx = pages.firstIndex(where: { $0.id == id }) {
+            let bmID = pages[idx].bookmark.id
+            pages.remove(at: idx)
+            // 该页正在分屏里 → 同步关掉那半屏（转正另一半），避免僵尸半屏
+            if splitTop?.id == bmID || splitBottom?.id == bmID {
+                let survivor = splitTop?.id == bmID ? splitBottom : splitTop
+                splitTop = nil
+                splitBottom = nil
+                splitTopPage = nil
+                splitBottomPage = nil
+                if let s = survivor { open(s) }
+            }
+        }
         if fullscreenID == id { fullscreenID = nil }
         if floatingID == id { floatingID = nil }
     }

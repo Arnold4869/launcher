@@ -6,6 +6,9 @@ import WebKit
 struct SplitViewScreen: View {
     let top: Bookmark
     let bottom: Bookmark
+    /// 后台已打开页面的 PageState（有则复用其常驻 WebView，浏览状态保留）
+    var topPage: PageState? = nil
+    var bottomPage: PageState? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var topFraction: Double = 0.5
     @State private var expanded = false
@@ -16,7 +19,7 @@ struct SplitViewScreen: View {
             VStack(spacing: 0) {
                 if topFraction > 0.02 {
                     // 上半屏（拖到最底时关闭）
-                    SplitWebView(bm: top)
+                    halfView(for: top, page: topPage)
                         .frame(height: geo.size.height * max(topFraction, 0))
                         .overlay(alignment: .topLeading) { SplitLabel(bm: top) }
                 }
@@ -52,7 +55,7 @@ struct SplitViewScreen: View {
 
                 if topFraction < 0.98 {
                     // 下半屏（拖到最顶时关闭）
-                    SplitWebView(bm: bottom)
+                    halfView(for: bottom, page: bottomPage)
                         .overlay(alignment: .topLeading) { SplitLabel(bm: bottom) }
                 }
             }
@@ -69,6 +72,8 @@ struct SplitViewScreen: View {
                 expanded = false; savedFraction = topFraction
                 wm.splitTop = nil
                 wm.splitBottom = nil
+                wm.splitTopPage = nil
+                wm.splitBottomPage = nil
             }
         }
         .onAppear {
@@ -79,6 +84,12 @@ struct SplitViewScreen: View {
 
     private enum Half { case top, bottom }
 
+    /// 半屏内容：有 PageState 复用其常驻 WebView，否则新建
+    @ViewBuilder
+    private func halfView(for bm: Bookmark, page: PageState?) -> some View {
+        SplitWebView(bm: bm, page: page)
+    }
+
     /// 关闭一半：保留的半屏转成全屏页（wm.open 复用已有 PageState 时浏览状态保留）
     private func closeHalf(_ half: Half) {
         savedFraction = 0.5
@@ -86,15 +97,18 @@ struct SplitViewScreen: View {
         // 清分屏状态（LauncherApp zIndex3 层消失）+ dismiss 关掉 SplitFlowView 的 fullScreenCover
         wm.splitTop = nil
         wm.splitBottom = nil
+        wm.splitTopPage = nil
+        wm.splitBottomPage = nil
         dismiss()
         // 保留的半屏转正为全屏页（如果它在 pages 里，直接全屏不重建；否则新开）
         wm.open(survivor)
     }
 }
 
-/// 分屏内独立 WebView（一次性实例，带配置）
+/// 分屏内 WebView：优先复用 PageState 缓存实例（浏览状态保留），无则新建
 struct SplitWebView: UIViewRepresentable {
     let bm: Bookmark
+    var page: PageState? = nil
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         func webView(_ webView: WKWebView,
@@ -118,6 +132,13 @@ struct SplitWebView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> WKWebView {
+        if let page {
+            // 复用常驻实例：重新接上 delegate（Basic Auth / 登录填充），不重载页面
+            let wv = page.webView
+            wv.navigationDelegate = context.coordinator
+            wv.currentBookmark = bm
+            return wv
+        }
         let config = WKWebViewConfiguration()
         config.websiteDataStore = WKWebsiteDataStore.default()
         let wv = WKWebView(frame: .zero, configuration: config)
@@ -153,11 +174,12 @@ struct SplitFlowView: View {
     @ObservedObject var store: BookmarkStore
     @EnvironmentObject var wm: WindowManager
     @State private var bottom: Bookmark?
+    @State private var bottomPage: PageState?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         if let bottom {
-            SplitViewScreen(top: top, bottom: bottom)
+            SplitViewScreen(top: top, bottom: bottom, bottomPage: bottomPage)
         } else {
             NavigationStack {
                 ScrollView {
@@ -172,6 +194,7 @@ struct SplitFlowView: View {
                                 ForEach(openPages) { page in
                                     Button {
                                         bottom = page.bookmark
+                                        bottomPage = page
                                     } label: {
                                         BookmarkCard(bm: page.bookmark)
                                             .overlay(alignment: .topTrailing) {
@@ -218,9 +241,13 @@ struct SplitPickerView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        pickerContent
+    }
+
+    private var pickerContent: some View {
         NavigationStack {
             ScrollView {
-                // 已打开的后台页面：直接选为下半屏（浏览状态保留）
+                // 已打开的后台页面：直接选为下半屏（复用常驻 WebView，浏览状态保留）
                 let openPages = wm.pages.filter { $0.bookmark.id != top.id }
                 if !openPages.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
@@ -233,7 +260,9 @@ struct SplitPickerView: View {
                                 Button {
                                     wm.goHome()
                                     wm.splitTop = top
+                                    wm.splitTopPage = nil
                                     wm.splitBottom = page.bookmark
+                                    wm.splitBottomPage = page
                                     dismiss()
                                 } label: {
                                     BookmarkCard(bm: page.bookmark)
@@ -255,7 +284,9 @@ struct SplitPickerView: View {
                         Button {
                             wm.goHome()
                             wm.splitTop = top
+                            wm.splitTopPage = nil
                             wm.splitBottom = bm
+                            wm.splitBottomPage = nil
                             dismiss()
                         } label: {
                             BookmarkCard(bm: bm)

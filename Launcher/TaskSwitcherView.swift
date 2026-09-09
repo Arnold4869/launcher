@@ -122,6 +122,8 @@ struct TaskSwitcherView: View {
             wm.setPageForSplit(top, top: true)
             wm.setPageForSplit(page.bookmark, top: false)
             pendingTop = nil
+            // 回主页再进分屏：不清 fullscreenID 会残留全屏层盖住分屏
+            wm.goHome()
             dismiss()
         } else {
             wm.fullscreenID = page.id
@@ -135,6 +137,7 @@ struct TaskSwitcherView: View {
             wm.setPageForSplit(top, top: true)
             wm.setPageForSplit(bm, top: false)
             pendingTop = nil
+            wm.goHome()
             dismiss()
         } else {
             pendingTop = bm
