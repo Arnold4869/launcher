@@ -22,7 +22,7 @@ struct SplitViewScreen: View {
     private func scheduleBarHide() {
         barHideTask?.cancel()
         let task = DispatchWorkItem {
-            withAnimation(.easeInOut(duration: 0.25)) { bottomBarVisible = false }
+            bottomBarVisible = false
         }
         barHideTask = task
         DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: task)
@@ -84,6 +84,7 @@ struct SplitViewScreen: View {
                     .environmentObject(wm)
                     .environmentObject(store)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.2), value: bottomBarVisible)
                     .onAppear { scheduleBarHide() }
             }
         }
@@ -126,7 +127,7 @@ struct SplitViewScreen: View {
     private func halfView(for bm: Bookmark, page: PageState?) -> some View {
         SplitWebView(bm: bm, page: page, onWebViewTap: {
             if !bottomBarVisible {
-                withAnimation(.easeInOut(duration: 0.2)) { bottomBarVisible = true }
+                bottomBarVisible = true
             }
             scheduleBarHide()
         })

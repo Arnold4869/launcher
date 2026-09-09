@@ -256,7 +256,7 @@ struct FullscreenPage: View {
     private func scheduleBarHide() {
         barHideTask?.cancel()
         let task = DispatchWorkItem {
-            withAnimation(.easeInOut(duration: 0.25)) { bottomBarVisible = false }
+            bottomBarVisible = false
         }
         barHideTask = task
         DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: task)
@@ -268,7 +268,7 @@ struct FullscreenPage: View {
                         edgeSwipeHome: { wm.goHome() },
                         onWebViewTap: {
                             if !bottomBarVisible {
-                                withAnimation(.easeInOut(duration: 0.2)) { bottomBarVisible = true }
+                                bottomBarVisible = true
                             }
                             scheduleBarHide()
                         })
@@ -303,6 +303,8 @@ struct FullscreenPage: View {
                     .environmentObject(wm)
                     .environmentObject(store)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+                    // 动画限定在导航栏自身，避免整页（含 WebView）跟着动画出现"刷新"感
+                    .animation(.easeInOut(duration: 0.2), value: bottomBarVisible)
                     .onAppear { scheduleBarHide() }
             }
         }
@@ -393,6 +395,8 @@ struct PageWebView: UIViewRepresentable {
         weak var page: PageState? = nil
         var edgeSwipeHome: (() -> Void)? = nil
         var onWebViewTap: (() -> Void)? = nil
+        var lastZoom: Double? = nil
+        var lastFontAdjust: Double? = nil
         var clearRefreshObserver: NSObjectProtocol? = nil
 
         deinit {
@@ -493,7 +497,12 @@ struct PageWebView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.edgeSwipeHome = edgeSwipeHome
         webView.currentBookmark = page.bookmark
-        webView.pageZoom = zoom
+
+        // 只在值真的变了才写 WKWebView：每次 body 重算（如底栏显隐）都写 pageZoom / 跑 JS 会让网页闪一下、像刷新
+        if context.coordinator.lastZoom != zoom {
+            context.coordinator.lastZoom = zoom
+            webView.pageZoom = zoom
+        }
 
         let wantUA = desktopUA ? PageWebView.desktopUserAgent : nil
         if webView.customUserAgent != wantUA {
@@ -501,7 +510,8 @@ struct PageWebView: UIViewRepresentable {
             webView.reload()
         }
 
-        if fontAdjust != 0 {
+        if fontAdjust != 0, context.coordinator.lastFontAdjust != fontAdjust {
+            context.coordinator.lastFontAdjust = fontAdjust
             let js = "document.documentElement.style.webkitTextSizeAdjust='\(100 + Int(fontAdjust))%';"
             webView.evaluateJavaScript(js, completionHandler: nil)
         }
