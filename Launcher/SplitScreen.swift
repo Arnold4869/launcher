@@ -86,14 +86,6 @@ struct SplitViewScreen: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .onAppear { scheduleBarHide() }
             }
-            if !bottomBarVisible {
-                Color.clear
-                    .frame(height: 28)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.2)) { bottomBarVisible = true }
-                    }
-            }
         }
         .overlay {
             // 可拖动 + 吸边隐藏悬浮钮（与全屏页共用位置）
@@ -132,7 +124,12 @@ struct SplitViewScreen: View {
     /// 半屏内容：有 PageState 复用其常驻 WebView，否则新建
     @ViewBuilder
     private func halfView(for bm: Bookmark, page: PageState?) -> some View {
-        SplitWebView(bm: bm, page: page)
+        SplitWebView(bm: bm, page: page, onWebViewTap: {
+            if !bottomBarVisible {
+                withAnimation(.easeInOut(duration: 0.2)) { bottomBarVisible = true }
+            }
+            scheduleBarHide()
+        })
     }
 
     /// 关闭一半：保留的半屏转成全屏页（wm.open 复用已有 PageState 时浏览状态保留）
@@ -205,6 +202,15 @@ struct SplitWebView: UIViewRepresentable {
         fresh.navigationDelegate = context.coordinator
         fresh.currentBookmark = bm
         context.coordinator.page = page
+        context.coordinator.onWebViewTap = onWebViewTap
+        // 浏览器式：单击网页任意处唤出底部导航栏；不吞触摸
+        if onWebViewTap != nil && !(fresh.gestureRecognizers ?? []).contains(where: { $0.name == "barRevealTap" }) {
+            let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.webViewTapped))
+            tap.name = "barRevealTap"
+            tap.cancelsTouchesInView = false
+            tap.delegate = context.coordinator
+            fresh.addGestureRecognizer(tap)
+        }
         // 清缓存刷新（分屏 FAB 触发时上下两半都要响应）
         context.coordinator.clearRefreshObserver = NotificationCenter.default.addObserver(
             forName: .launcherClearRefresh, object: nil, queue: .main) { [weak fresh] note in

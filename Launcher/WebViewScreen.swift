@@ -265,7 +265,13 @@ struct FullscreenPage: View {
     var body: some View {
         ZStack {
             PageWebView(page: page, zoom: zoom, fontAdjust: fontAdjust, desktopUA: desktopUA,
-                        edgeSwipeHome: { wm.goHome() })
+                        edgeSwipeHome: { wm.goHome() },
+                        onWebViewTap: {
+                            if !bottomBarVisible {
+                                withAnimation(.easeInOut(duration: 0.2)) { bottomBarVisible = true }
+                            }
+                            scheduleBarHide()
+                        })
         }
         .overlay {
             // 可拖动 + 自动吸边隐藏的悬浮钮（位置持久化，跟主屏共用）
@@ -291,22 +297,13 @@ struct FullscreenPage: View {
         }
         .overlay(alignment: .bottom) {
             // 底部浮动导航栏：悬浮在网页之上（不改布局、不触发重渲染）
-            // 隐藏时只剩触底唤出热区；显示 3 秒后自动隐藏
+            // 单击网页任意处唤出；显示 3 秒后自动隐藏
             if bottomBarVisible {
                 PageBottomBar(currentPage: page)
                     .environmentObject(wm)
                     .environmentObject(store)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .onAppear { scheduleBarHide() }
-            }
-            // 唤出热区（导航栏隐藏时才启用）
-            if !bottomBarVisible {
-                Color.clear
-                    .frame(height: 28)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.2)) { bottomBarVisible = true }
-                    }
             }
         }
         .sheet(isPresented: $showQuickSettings) {
@@ -399,6 +396,11 @@ struct PageWebView: UIViewRepresentable {
             if let obs = clearRefreshObserver { NotificationCenter.default.removeObserver(obs) }
         }
 
+        @objc func webViewTapped() { onWebViewTap?() }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+
         @objc func edgeSwiped() {
             edgeSwipeHome?()
         }
@@ -470,6 +472,15 @@ struct PageWebView: UIViewRepresentable {
             webView.addGestureRecognizer(edgeGesture)
         }
 
+        if onWebViewTap != nil && !(webView.gestureRecognizers ?? []).contains(where: { $0.name == "barRevealTap" }) {
+            // 浏览器式：单击网页任意处唤出底部导航栏；不吞触摸，网页本身的点击照常响应
+            let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.webViewTapped))
+            tap.name = "barRevealTap"
+            tap.cancelsTouchesInView = false
+            tap.delegate = context.coordinator
+            webView.addGestureRecognizer(tap)
+        }
+
         // 首次创建才加载初始 URL；复用实例（后台/分屏搬回）保留当前页面不重载
         let isFirstLoad = webView.url == nil
         if isFirstLoad, let url = URL(string: page.bookmark.urlString) {
@@ -501,6 +512,7 @@ struct PageWebView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator {
         let c = Coordinator()
         c.page = page
+        c.onWebViewTap = onWebViewTap
         return c
     }
 
@@ -663,8 +675,13 @@ struct PageBottomBar: View {
                 .environmentObject(store)
         }
         .sheet(isPresented: $showSplitPicker) {
+            // page 模式：当前页当上半屏；split 模式（分屏页内）：现上半屏重选下半屏
             if let page = currentPage {
                 SplitPickerView(top: page.bookmark, topPage: page)
+                    .environmentObject(wm)
+                    .environmentObject(store)
+            } else if let top = wm.splitTop {
+                SplitPickerView(top: top, topPage: wm.splitTopPage)
                     .environmentObject(wm)
                     .environmentObject(store)
             }
