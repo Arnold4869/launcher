@@ -387,6 +387,8 @@ struct PageWebView: UIViewRepresentable {
     var fontAdjust: Double = 0
     var desktopUA: Bool = false
     var edgeSwipeHome: (() -> Void)? = nil
+    /// 单击网页空白处回调（底部导航栏唤出用；不吞触摸）
+    var onWebViewTap: (() -> Void)? = nil
     final class Coordinator: NSObject, WKNavigationDelegate, UIGestureRecognizerDelegate {
         weak var page: PageState? = nil
         var edgeSwipeHome: (() -> Void)? = nil
@@ -403,11 +405,6 @@ struct PageWebView: UIViewRepresentable {
 
         @objc func edgeSwiped() {
             edgeSwipeHome?()
-        }
-
-        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
-                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-            true
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {

@@ -151,9 +151,15 @@ struct SplitViewScreen: View {
 struct SplitWebView: UIViewRepresentable {
     let bm: Bookmark
     var page: PageState? = nil
+    /// 单击网页空白处回调（底部导航栏唤出用；不吞触摸）
+    var onWebViewTap: (() -> Void)? = nil
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, UIGestureRecognizerDelegate {
+        var onWebViewTap: (() -> Void)? = nil
         var clearRefreshObserver: NSObjectProtocol? = nil
+        @objc func webViewTapped() { onWebViewTap?() }
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
         deinit {
             if let obs = clearRefreshObserver { NotificationCenter.default.removeObserver(obs) }
         }
