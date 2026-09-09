@@ -2,8 +2,12 @@ import SwiftUI
 
 /// 全屏/悬浮窗口状态管理（App 级）
 final class WindowManager: ObservableObject {
-    @Published var pages: [PageState] = []
-    @Published var fullscreenID: UUID?
+    @Published var pages: [PageState] = [] {
+        didSet { persistPages() }
+    }
+    @Published var fullscreenID: UUID? {
+        didSet { persistPages() }
+    }
     @Published var floatingID: UUID?
     /// 悬浮窗功能开关：代码保留，暂不显示
     @Published var showFloating = false
@@ -93,4 +97,35 @@ final class WindowManager: ObservableObject {
 
     /// 两半都齐 → true（供调用方判断能否直接进分屏）
     var splitReady: Bool { splitTop != nil && splitBottom != nil }
+
+    // MARK: - 页面会话持久化（App 重启后恢复多任务页面）
+    private static let pagesKey = "openPageBookmarkIDs"
+    private static let fullscreenKey = "openFullscreenBookmarkID"
+
+    private func persistPages() {
+        let ids = pages.compactMap { $0.bookmark.id.uuidString }
+        UserDefaults.standard.set(ids, forKey: Self.pagesKey)
+        let fsID = fullscreenID.flatMap { fid in
+            pages.first { $0.id == fid }?.bookmark.id.uuidString
+        }
+        UserDefaults.standard.set(fsID, forKey: Self.fullscreenKey)
+    }
+
+    /// App 启动时调用：按保存的书签 ID 恢复后台页面
+    func restorePages(store: BookmarkStore) {
+        guard pages.isEmpty, let ids = UserDefaults.standard.stringArray(forKey: Self.pagesKey), !ids.isEmpty else { return }
+        let uuids = ids.compactMap { UUID(uuidString: $0) }
+        for id in uuids {
+            if let bm = store.bookmarks.first(where: { $0.id == id }) {
+                pages.append(PageState(bm))
+            }
+        }
+        if let fsUUID = UserDefaults.standard.string(forKey: Self.fullscreenKey).flatMap({ UUID(uuidString: $0) }),
+           let page = pages.first(where: { $0.bookmark.id == fsUUID }) {
+            fullscreenID = page.id
+        }
+        if !pages.isEmpty && fullscreenID == nil {
+            UserDefaults.standard.removeObject(forKey: Self.fullscreenKey)
+        }
+    }
 }

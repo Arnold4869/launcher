@@ -64,8 +64,11 @@ struct SplitViewScreen: View {
         .ignoresSafeArea()
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .overlay(alignment: .topLeading) {
-            FabHiddenHomePill()
+                .safeAreaInset(edge: .bottom) {
+            // 底部透明导航栏：主页 / 多任务 / 分屏（分屏页沿用，分屏钮重新选下半屏）
+            PageBottomBar()
+                .environmentObject(wm)
+                .environmentObject(store)
         }
         .overlay {
             // 可拖动 + 吸边隐藏悬浮钮（与全屏页共用位置）

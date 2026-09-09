@@ -13,6 +13,9 @@ struct LauncherApp: App {
             }
             .animation(.easeInOut(duration: 0.2), value: wm.fullscreenID)
             .animation(.easeInOut(duration: 0.2), value: wm.floatingID)
+            .onAppear {
+                wm.restorePages(store: store)
+            }
         }
     }
 
@@ -27,6 +30,7 @@ struct LauncherApp: App {
             ZStack {
                 ForEach(wm.pages) { page in
                     PageHost(page: page, wm: wm, geo: geo)
+                        .environmentObject(wm)
                         .environmentObject(store)
                         .zIndex(page.id == wm.floatingID ? 2 : 1)
                 }

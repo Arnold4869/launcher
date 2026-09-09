@@ -255,10 +255,6 @@ struct FullscreenPage: View {
             PageWebView(page: page, zoom: zoom, fontAdjust: fontAdjust, desktopUA: desktopUA,
                         edgeSwipeHome: { wm.goHome() })
         }
-        .overlay(alignment: .topLeading) {
-            // 常驻返回主页胶囊（左上角，任何时候都可见可点）
-            FabHiddenHomePill()
-        }
         .overlay {
             // 可拖动 + 自动吸边隐藏的悬浮钮（位置持久化，跟主屏共用）
             FloatingMenuButton(expanded: expanded, onToggle: {
@@ -280,6 +276,12 @@ struct FullscreenPage: View {
             .onReceive(NotificationCenter.default.publisher(for: .fabActionSettings)) { _ in
                 expanded = false; showQuickSettings = true
             }
+        }
+        .safeAreaInset(edge: .bottom) {
+            // 底部透明导航栏：主页 / 多任务 / 分屏
+            PageBottomBar(currentPage: page)
+                .environmentObject(wm)
+                .environmentObject(store)
         }
         .sheet(isPresented: $showQuickSettings) {
             QuickSettingsView(bookmarkID: page.bookmark.id,
@@ -580,25 +582,49 @@ extension WKWebView {
 
 
 // MARK: - 全屏/分屏页常驻「返回主页」胶囊（任何时候都可见可点，FAB 只是附加入口）
-struct FabHiddenHomePill: View {
+/// 全屏/分屏页底部透明导航栏：主页 / 多任务 / 分屏（一行三钮，玻璃透明样式）
+struct PageBottomBar: View {
     @EnvironmentObject var wm: WindowManager
+    @EnvironmentObject var store: BookmarkStore
+    @State private var showTaskSwitcher = false
+    @State private var showSplitPicker = false
+    /// 发起分屏时需要的当前页（由父级 onAppear 注入太绕，直接用全屏 id 找）
+    var currentPage: PageState? = nil
 
     var body: some View {
-        Button {
-            wm.goHome()
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .bold))
-                Text("主页")
-                    .font(.footnote.bold())
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 14)
-            .frame(height: 36)
-            .background(.black.opacity(0.5), in: Capsule())
+        HStack {
+            barButton("house", "主页") { wm.goHome() }
+            Spacer()
+            barButton("square.on.square", "多任务") { showTaskSwitcher = true }
+            Spacer()
+            barButton("rectangle.split.2x1", "分屏") { showSplitPicker = true }
         }
-        .padding(.leading, 16)
-        .padding(.top, 60)   // 避开状态栏/灵动岛
+        .padding(.horizontal, 40)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+        .sheet(isPresented: $showTaskSwitcher) {
+            TaskSwitcherView()
+                .environmentObject(wm)
+                .environmentObject(store)
+        }
+        .sheet(isPresented: $showSplitPicker) {
+            if let page = currentPage {
+                SplitPickerView(top: page.bookmark, topPage: page)
+                    .environmentObject(wm)
+            }
+        }
+    }
+
+    private func barButton(_ icon: String, _ label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 19))
+                Text(label)
+                    .font(.system(size: 10))
+            }
+            .foregroundStyle(.primary)
+            .frame(maxWidth: .infinity)
+        }
     }
 }
