@@ -45,10 +45,9 @@ struct FloatingMenuButton: View {
                     // 展开时菜单贴边显示（左吸边→菜单列也贴左，右同理），收起时在钮位置
                     Group {
                         if expanded {
-                            // 菜单列：主钮在底部，五个子钮向上展开，整列贴边
+                            // 菜单列：主钮在底部，四个子钮向上展开，整列贴边
                             VStack(spacing: 12) {
                                 MenuButtonItem(icon: "house", label: "主页", size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionHome, object: nil) }
-                                MenuButtonItem(icon: "square.on.square.dashed", label: "多任务", size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionTasks, object: nil) }
                                 MenuButtonItem(icon: "square.split.2x1", label: "分屏", size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionSplit, object: nil) }
                                 MenuButtonItem(icon: "arrow.clockwise", label: "清缓存", size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionClearCache, object: nil) }
                                 MenuButtonItem(icon: "slider.horizontal.3", label: "设置", size: buttonSize) { onToggle(); NotificationCenter.default.post(name: .fabActionSettings, object: nil) }
@@ -91,7 +90,7 @@ struct FloatingMenuButton: View {
     /// 展开时菜单位置：整列贴到所属侧边，主钮在列底部（屏幕右/左下角区域向上展开）
     private func expandedMenuPosition(_ size: CGSize) -> CGPoint {
         let leftSide = pos.x < size.width / 2
-        let menuHeight = buttonSize * 7 + 12 * 6   // 7 个钮（主页/多任务/分屏/清缓存/设置/隐藏/主钮）+ 间距
+        let menuHeight = buttonSize * 6 + 12 * 5   // 6 个钮（主页/分屏/清缓存/设置/隐藏/主钮）+ 间距
         let x = leftSide
             ? edgeMargin + 18 + buttonSize/2
             : size.width - edgeMargin - 18 - buttonSize/2

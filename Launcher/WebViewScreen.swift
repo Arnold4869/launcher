@@ -289,20 +289,17 @@ struct FullscreenPage: View {
                 expanded = false; showQuickSettings = true
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            // 底部透明导航栏：网页操作时自动隐藏，点屏幕底部区域唤出（3 秒后自动再隐藏）
+        .overlay(alignment: .bottom) {
+            // 底部浮动导航栏：悬浮在网页之上（不改布局、不触发重渲染）
+            // 隐藏时只剩触底唤出热区；显示 3 秒后自动隐藏
             if bottomBarVisible {
                 PageBottomBar(currentPage: page)
                     .environmentObject(wm)
                     .environmentObject(store)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .onAppear { scheduleBarHide() }
-            } else {
-                Color.clear.frame(height: 0)
             }
-        }
-        .overlay(alignment: .bottom) {
-            // 底部唤出热区（导航栏隐藏时才启用）
+            // 唤出热区（导航栏隐藏时才启用）
             if !bottomBarVisible {
                 Color.clear
                     .frame(height: 28)
@@ -310,7 +307,6 @@ struct FullscreenPage: View {
                     .onTapGesture {
                         withAnimation(.easeInOut(duration: 0.2)) { bottomBarVisible = true }
                     }
-                    .allowsHitTesting(true)
             }
         }
         .sheet(isPresented: $showQuickSettings) {
@@ -612,26 +608,55 @@ extension WKWebView {
 
 
 // MARK: - 全屏/分屏页常驻「返回主页」胶囊（任何时候都可见可点，FAB 只是附加入口）
-/// 全屏/分屏页底部透明导航栏：主页 / 多任务 / 分屏（一行三钮，玻璃透明样式）
+/// 底部浮动导航栏（主页/全屏/分屏共用）：一级 3-4 钮，导入/导出/设置收进「更多」二级菜单
+/// mode: .home 主页形态（无主页钮，带新增）；.page 网页形态（主页/多任务/分屏）
 struct PageBottomBar: View {
+    enum BarMode { case home, page }
+    var mode: BarMode = .page
+    /// 发起分屏时需要的当前页（page 模式下用）
+    var currentPage: PageState? = nil
+
     @EnvironmentObject var wm: WindowManager
     @EnvironmentObject var store: BookmarkStore
     @State private var showTaskSwitcher = false
     @State private var showSplitPicker = false
-    /// 发起分屏时需要的当前页（由父级 onAppear 注入太绕，直接用全屏 id 找）
-    var currentPage: PageState? = nil
+    @State private var showAdd = false
+    @State private var showSettings = false
+    @State private var showImporter = false
 
     var body: some View {
-        HStack {
-            barButton("house", "主页") { wm.goHome() }
-            Spacer()
-            barButton("square.on.square", "多任务") { showTaskSwitcher = true }
-            Spacer()
-            barButton("rectangle.split.2x1", "分屏") { showSplitPicker = true }
+        HStack(spacing: 0) {
+            if mode == .page {
+                barButton("house", "主页") { wm.goHome() }
+                barButton("square.on.square", "多任务") { showTaskSwitcher = true }
+                barButton("rectangle.split.2x1", "分屏") { showSplitPicker = true }
+            } else {
+                barButton("square.on.square", "多任务") { showTaskSwitcher = true }
+                barButton("plus", "新增") { showAdd = true }
+            }
+            // 二级菜单：导入 / 导出 / 设置
+            Menu {
+                Button { showImporter = true } label: { Label("导入书签", systemImage: "square.and.arrow.down") }
+                ShareLink(item: store.exportURL(), preview: SharePreview("launcher-bookmarks.json")) {
+                    Label("导出书签", systemImage: "square.and.arrow.up")
+                }
+                Button { showSettings = true } label: { Label("设置", systemImage: "gearshape") }
+            } label: {
+                VStack(spacing: 3) {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 19))
+                    Text("更多")
+                        .font(.system(size: 10))
+                }
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity)
+            }
         }
-        .padding(.horizontal, 40)
+        .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 4)
         .sheet(isPresented: $showTaskSwitcher) {
             TaskSwitcherView()
                 .environmentObject(wm)
@@ -641,6 +666,21 @@ struct PageBottomBar: View {
             if let page = currentPage {
                 SplitPickerView(top: page.bookmark, topPage: page)
                     .environmentObject(wm)
+                    .environmentObject(store)
+            }
+        }
+        .sheet(isPresented: $showAdd) {
+            BookmarkEditView(store: store, bookmark: nil)
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+        }
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
+            // 导入书签：与主页原入口同一处理（security scoped + importFrom）
+            if case .success(let url) = result {
+                let scoped = url.startAccessingSecurityScopedResource()
+                _ = store.importFrom(url)
+                if scoped { url.stopAccessingSecurityScopedResource() }
             }
         }
     }

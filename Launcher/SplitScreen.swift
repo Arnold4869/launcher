@@ -77,18 +77,15 @@ struct SplitViewScreen: View {
         .ignoresSafeArea()
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
+                .overlay(alignment: .bottom) {
+            // 底部浮动导航栏（悬浮在分屏之上，不改布局）
             if bottomBarVisible {
                 PageBottomBar()
                     .environmentObject(wm)
                     .environmentObject(store)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .onAppear { scheduleBarHide() }
-            } else {
-                Color.clear.frame(height: 0)
             }
-        }
-        .overlay(alignment: .bottom) {
             if !bottomBarVisible {
                 Color.clear
                     .frame(height: 28)

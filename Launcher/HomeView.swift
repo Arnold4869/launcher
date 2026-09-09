@@ -31,26 +31,6 @@ struct HomeView: View {
                 } else {
                     ScrollView {
                         LazyVGrid(columns: gridColumns, spacing: 14) {
-                            // 多任务入口卡（有打开页面时显示，像书签 tile 一样点进去切换）
-                            if !wm.pages.isEmpty {
-                                Button {
-                                    showTaskSwitcher = true
-                                } label: {
-                                    VStack(spacing: 8) {
-                                        ZStack {
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color.blue.opacity(0.12))
-                                                .frame(height: CGFloat(cardHeight))
-                                            Image(systemName: "square.on.square")
-                                                .font(.system(size: 30))
-                                                .foregroundStyle(.blue)
-                                        }
-                                        Text("多任务 (\(wm.pages.count))")
-                                            .font(.footnote)
-                                            .lineLimit(1)
-                                    }
-                                }
-                            }
                             ForEach(store.bookmarks) { bm in
                                 Button {
                                     wm.open(bm)
@@ -80,27 +60,15 @@ struct HomeView: View {
                     }
                 }
             }
+            .overlay(alignment: .bottom) {
+                // 主页底部浮动导航栏（常驻，含多任务/新增/更多二级菜单）
+                PageBottomBar(mode: .home)
+                    .environmentObject(wm)
+                    .environmentObject(store)
+            }
             .navigationTitle("Launcher")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showTaskSwitcher = true
-                    } label: {
-                        // 类浏览器标签页管理入口，角标显示后台页数
-                        Image(systemName: "square.on.square.dashed")
-                            .overlay(alignment: .topTrailing) {
-                                if !wm.pages.isEmpty {
-                                    Text("\(wm.pages.count)")
-                                        .font(.system(size: 8, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .padding(3)
-                                        .background(Circle().fill(.blue))
-                                        .offset(x: 8, y: -6)
-                                }
-                            }
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
+                                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         ShareLink(item: store.exportURL(),
                                   preview: SharePreview("launcher-bookmarks.json")) {
