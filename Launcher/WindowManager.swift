@@ -15,17 +15,15 @@ final class WindowManager: ObservableObject {
     // 默认高宽比 = 屏幕比例
     @Published var floatingHeight: CGFloat = 120 * (UIScreen.main.bounds.height / UIScreen.main.bounds.width)
 
-    /// 打开书签：已在列表里 → 直接放大到全屏；否则新开（超过 2 个关掉悬浮那个）
+    /// 打开书签：已在列表里 → 直接放大到全屏；否则新开（超过 4 个关掉最早的未显示页）
     func open(_ bm: Bookmark) {
         if let page = pages.first(where: { $0.bookmark.id == bm.id }) {
             fullscreenID = page.id
             return
         }
-        if pages.count >= 2 {
-            if let fid = floatingID {
-                pages.removeAll { $0.id == fid }
-            } else if let oldest = pages.first {
-                pages.removeAll { $0.id == oldest.id }
+        if pages.count >= 4 {
+            if let victim = pages.first(where: { $0.id != fullscreenID && $0.id != floatingID }) {
+                pages.removeAll { $0.id == victim.id }
             }
         }
         let page = PageState(bm)
@@ -60,4 +58,12 @@ final class WindowManager: ObservableObject {
         if fullscreenID == id { fullscreenID = nil }
         if floatingID == id { floatingID = nil }
     }
+
+    /// 把某后台页设为分屏一半：top=true 设为上半屏。已在分屏里则换掉那半
+    func setPageForSplit(_ bm: Bookmark, top: Bool) {
+        if top { splitTop = bm } else { splitBottom = bm }
+    }
+
+    /// 两半都齐 → true（供调用方判断能否直接进分屏）
+    var splitReady: Bool { splitTop != nil && splitBottom != nil }
 }

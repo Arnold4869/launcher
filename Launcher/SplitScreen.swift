@@ -147,10 +147,11 @@ struct SplitLabel: View {
     }
 }
 
-/// 分屏流程：先选下半屏书签，选中后切分屏
+/// 分屏流程：先选下半屏书签（后台已打开的页面排前面，浏览状态保留），选中后切分屏
 struct SplitFlowView: View {
     let top: Bookmark
     @ObservedObject var store: BookmarkStore
+    @EnvironmentObject var wm: WindowManager
     @State private var bottom: Bookmark?
     @Environment(\.dismiss) private var dismiss
 
@@ -160,6 +161,32 @@ struct SplitFlowView: View {
         } else {
             NavigationStack {
                 ScrollView {
+                    let openPages = wm.pages.filter { $0.bookmark.id != top.id }
+                    if !openPages.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("已打开的页面")
+                                .font(.footnote.bold())
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
+                                ForEach(openPages) { page in
+                                    Button {
+                                        bottom = page.bookmark
+                                    } label: {
+                                        BookmarkCard(bm: page.bookmark)
+                                            .overlay(alignment: .topTrailing) {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundStyle(.blue)
+                                                    .padding(6)
+                                            }
+                                    }
+                                }
+                            }
+                            Divider().padding(.vertical, 8)
+                        }
+                        .padding(.horizontal)
+                        .padding(.top)
+                    }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
                         ForEach(store.bookmarks.filter { $0.id != top.id }) { bm in
                             Button {
@@ -193,6 +220,36 @@ struct SplitPickerView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
+                // 已打开的后台页面：直接选为下半屏（浏览状态保留）
+                let openPages = wm.pages.filter { $0.bookmark.id != top.id }
+                if !openPages.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("已打开的页面")
+                            .font(.footnote.bold())
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
+                            ForEach(openPages) { page in
+                                Button {
+                                    wm.goHome()
+                                    wm.splitTop = top
+                                    wm.splitBottom = page.bookmark
+                                    dismiss()
+                                } label: {
+                                    BookmarkCard(bm: page.bookmark)
+                                        .overlay(alignment: .topTrailing) {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundStyle(.blue)
+                                                .padding(6)
+                                        }
+                                }
+                            }
+                        }
+                        Divider().padding(.vertical, 8)
+                    }
+                    .padding(.horizontal)
+                    .padding(.top)
+                }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
                     ForEach(store.bookmarks.filter { $0.id != top.id }) { bm in
                         Button {

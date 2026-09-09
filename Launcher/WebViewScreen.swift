@@ -236,6 +236,7 @@ struct FullscreenPage: View {
 
     @State private var showQuickSettings = false
     @State private var showSplitPicker = false
+    @State private var showTaskSwitcher = false
     @State private var expanded = false
     @State private var zoom: Double
     @State private var fontAdjust: Double
@@ -262,6 +263,9 @@ struct FullscreenPage: View {
             .onReceive(NotificationCenter.default.publisher(for: .fabActionHome)) { _ in
                 expanded = false; wm.goHome()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .fabActionTasks)) { _ in
+                expanded = false; showTaskSwitcher = true
+            }
             .onReceive(NotificationCenter.default.publisher(for: .fabActionSplit)) { _ in
                 expanded = false; showSplitPicker = true
             }
@@ -280,6 +284,11 @@ struct FullscreenPage: View {
         }
         .sheet(isPresented: $showSplitPicker) {
             SplitPickerView(top: page.bookmark)
+                .environmentObject(store)
+                .environmentObject(wm)
+        }
+        .sheet(isPresented: $showTaskSwitcher) {
+            TaskSwitcherView()
                 .environmentObject(store)
                 .environmentObject(wm)
         }

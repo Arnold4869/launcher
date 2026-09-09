@@ -13,6 +13,7 @@ struct HomeView: View {
     @State private var importMessage: String?
     @State private var showImportAlert = false
     @State private var showSettings = false
+    @State private var showTaskSwitcher = false
     @State private var splitPair: SplitPair?
 
     var body: some View {
@@ -61,6 +62,24 @@ struct HomeView: View {
             }
             .navigationTitle("Launcher")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showTaskSwitcher = true
+                    } label: {
+                        // 类浏览器标签页管理入口，角标显示后台页数
+                        Image(systemName: "square.on.square.dashed")
+                            .overlay(alignment: .topTrailing) {
+                                if !wm.pages.isEmpty {
+                                    Text("\(wm.pages.count)")
+                                        .font(.system(size: 8, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .padding(3)
+                                        .background(Circle().fill(.blue))
+                                        .offset(x: 8, y: -6)
+                                }
+                            }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         ShareLink(item: store.exportURL(),
@@ -97,6 +116,11 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
+            }
+            .sheet(isPresented: $showTaskSwitcher) {
+                TaskSwitcherView()
+                    .environmentObject(store)
+                    .environmentObject(wm)
             }
             .fullScreenCover(item: $splitPair) { pair in
                 SplitFlowView(top: pair.top, store: store)
