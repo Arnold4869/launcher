@@ -14,6 +14,7 @@ struct SplitViewScreen: View {
     @State private var expanded = false
     @State private var showTaskSwitcher = false
     @EnvironmentObject var wm: WindowManager
+    @EnvironmentObject var store: BookmarkStore
     @AppStorage("splitFraction") private var savedFraction: Double = 0.5
     var body: some View {
         GeometryReader { geo in
