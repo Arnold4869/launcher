@@ -479,7 +479,7 @@ extension Notification.Name {
 extension WKWebView {
     func injectLoginFill() {
         let bm = currentBookmark
-        guard !bm.loginUser.isEmpty else { return }
+        guard !bm.loginUser.isEmpty || !bm.loginPass.isEmpty else { return }
         let user = bm.loginUser
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
@@ -507,7 +507,9 @@ extension WKWebView {
             if (!userEl) {
               userEl = document.querySelector("input[type=email], input[type=text], input[type=tel], input[name*=user i], input[name*=account i], input[name*=phone i], input[id*=user i]");
             }
-            if (!userEl) userEl = pw;
+            if (!userEl && user) {
+              userEl = pw;
+            }
             function setVal(el, v) {
               if (!el) return;
               var proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -517,7 +519,7 @@ extension WKWebView {
               el.dispatchEvent(new Event("change", {bubbles: true}));
             }
             var changed = false;
-            if ((userEl.value || "") !== user) { setVal(userEl, user); changed = true; }
+            if (userEl && (userEl.value || "") !== user) { setVal(userEl, user); changed = true; }
             if ((pw.value || "") !== pass) { setVal(pw, pass); changed = true; }
             // 隐私：无论网站怎么设置，密码框强制按圆点显示
             if (pw.type !== "password") { try { pw.type = "password"; } catch(e) {} }
