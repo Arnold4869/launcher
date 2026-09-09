@@ -13,21 +13,9 @@ struct SplitViewScreen: View {
     @State private var topFraction: Double = 0.5
     @State private var expanded = false
     @State private var showTaskSwitcher = false
-    @State private var bottomBarVisible = true
-    @State private var barHideTask: DispatchWorkItem? = nil
     @EnvironmentObject var wm: WindowManager
     @EnvironmentObject var store: BookmarkStore
     @AppStorage("splitFraction") private var savedFraction: Double = 0.5
-    /// 3 秒无操作自动隐藏底部导航栏
-    private func scheduleBarHide() {
-        barHideTask?.cancel()
-        let task = DispatchWorkItem {
-            bottomBarVisible = false
-        }
-        barHideTask = task
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: task)
-    }
-
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: 0) {
@@ -79,14 +67,9 @@ struct SplitViewScreen: View {
         .toolbar(.hidden, for: .navigationBar)
                 .overlay(alignment: .bottom) {
             // 底部浮动导航栏（悬浮在分屏之上，不改布局）
-            if bottomBarVisible {
-                PageBottomBar()
-                    .environmentObject(wm)
-                    .environmentObject(store)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .animation(.easeInOut(duration: 0.2), value: bottomBarVisible)
-                    .onAppear { scheduleBarHide() }
-            }
+            PageBottomBarLayer(mode: .page)
+                .environmentObject(wm)
+                .environmentObject(store)
         }
         .overlay {
             // 可拖动 + 吸边隐藏悬浮钮（与全屏页共用位置）
@@ -126,10 +109,7 @@ struct SplitViewScreen: View {
     @ViewBuilder
     private func halfView(for bm: Bookmark, page: PageState?) -> some View {
         SplitWebView(bm: bm, page: page, onWebViewTap: {
-            if !bottomBarVisible {
-                bottomBarVisible = true
-            }
-            scheduleBarHide()
+            NotificationCenter.default.post(name: .launcherPageTapped, object: nil)
         })
     }
 

@@ -238,8 +238,6 @@ struct FullscreenPage: View {
     @State private var showSplitPicker = false
     @State private var showTaskSwitcher = false
     @State private var expanded = false
-    @State private var bottomBarVisible = true
-    @State private var barHideTask: DispatchWorkItem? = nil
     @State private var zoom: Double
     @State private var fontAdjust: Double
     @State private var desktopUA: Bool
@@ -252,25 +250,13 @@ struct FullscreenPage: View {
         _desktopUA = State(initialValue: page.bookmark.desktopUA)
     }
 
-    /// 3 秒无操作自动隐藏底部导航栏
-    private func scheduleBarHide() {
-        barHideTask?.cancel()
-        let task = DispatchWorkItem {
-            bottomBarVisible = false
-        }
-        barHideTask = task
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: task)
-    }
-
     var body: some View {
         ZStack {
             PageWebView(page: page, zoom: zoom, fontAdjust: fontAdjust, desktopUA: desktopUA,
                         edgeSwipeHome: { wm.goHome() },
                         onWebViewTap: {
-                            if !bottomBarVisible {
-                                bottomBarVisible = true
-                            }
-                            scheduleBarHide()
+                            // 只发通知，不在页面本体改状态（避免 WebView 重绘）
+                            NotificationCenter.default.post(name: .launcherPageTapped, object: nil)
                         })
         }
         .overlay {
@@ -298,15 +284,9 @@ struct FullscreenPage: View {
         .overlay(alignment: .bottom) {
             // 底部浮动导航栏：悬浮在网页之上（不改布局、不触发重渲染）
             // 单击网页任意处唤出；显示 3 秒后自动隐藏
-            if bottomBarVisible {
-                PageBottomBar(currentPage: page)
-                    .environmentObject(wm)
-                    .environmentObject(store)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    // 动画限定在导航栏自身，避免整页（含 WebView）跟着动画出现"刷新"感
-                    .animation(.easeInOut(duration: 0.2), value: bottomBarVisible)
-                    .onAppear { scheduleBarHide() }
-            }
+            PageBottomBarLayer(mode: .page, currentPage: page)
+                .environmentObject(wm)
+                .environmentObject(store)
         }
         .onAppear { page.snapshotSuspended = true }
         .onDisappear { page.snapshotSuspended = false }
@@ -545,6 +525,8 @@ private var kBookmarkKey: UInt8 = 0
 
 extension Notification.Name {
     static let launcherClearRefresh = Notification.Name("launcherClearRefresh")
+    /// 单击网页 → 通知底栏层唤出（避免页面本体持有状态导致 WebView 跟着重绘）
+    static let launcherPageTapped = Notification.Name("launcherPageTapped")
 }
 
 // 网页登录表单自动填充：页面加载后检测登录表单（input[type=password]），自动填入书签存的账密。
@@ -636,6 +618,39 @@ extension WKWebView {
 
 
 // MARK: - 全屏/分屏页常驻「返回主页」胶囊（任何时候都可见可点，FAB 只是附加入口）
+
+/// 底部导航栏浮层（自带显隐状态）
+/// 关键：显隐状态只活在这一层，页面本体（含 WebView）完全不参与重算 —— 不再出现"刷一下"
+struct PageBottomBarLayer: View {
+    var mode: PageBottomBar.BarMode = .page
+    var currentPage: PageState? = nil
+
+    @State private var visible = true
+    @State private var hideTask: DispatchWorkItem? = nil
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            if visible {
+                PageBottomBar(mode: mode, currentPage: currentPage)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: visible)
+        .onAppear { scheduleHide() }
+        .onReceive(NotificationCenter.default.publisher(for: .launcherPageTapped)) { _ in
+            visible = true
+            scheduleHide()
+        }
+    }
+
+    private func scheduleHide() {
+        hideTask?.cancel()
+        let task = DispatchWorkItem { visible = false }
+        hideTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: task)
+    }
+}
+
 /// 底部浮动导航栏（主页/全屏/分屏共用）：一级 3-4 钮，导入/导出/设置收进「更多」二级菜单
 /// mode: .home 主页形态（无主页钮，带新增）；.page 网页形态（主页/多任务/分屏）
 struct PageBottomBar: View {
