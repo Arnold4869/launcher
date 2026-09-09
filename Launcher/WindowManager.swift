@@ -111,14 +111,20 @@ final class WindowManager: ObservableObject {
         UserDefaults.standard.set(fsID, forKey: Self.fullscreenKey)
     }
 
+    /// 内存警告：释放后台页 WebView，保住前台正在用的那个（避免前台被系统回收导致"突然刷新"）
+    func releaseBackgroundWebViews() {
+        for page in pages where page.id != fullscreenID {
+            page.captureSnapshot()      // 先留张图，切回来不会白屏
+            page.releaseWebView()
+        }
+    }
+
     /// 打开多任务时刷新全部页面快照；未挂载过的页面先补载初始 URL
     func refreshAllSnapshots() {
         for page in pages {
-            _ = page.webView   // 确保实例已建
-            if page.webView.url == nil, let url = URL(string: page.bookmark.urlString) {
-                page.webView.load(URLRequest(url: url))
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            // 只为「还活着」的页面抓图；已释放的不再重建（避免读着书时内存被后台页吃满导致前台被回收）
+            if page.released { continue }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 page.captureSnapshot()
             }
         }

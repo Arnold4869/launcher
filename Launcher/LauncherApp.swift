@@ -16,6 +16,9 @@ struct LauncherApp: App {
             .onAppear {
                 wm.restorePages(store: store)
             }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+                wm.releaseBackgroundWebViews()
+            }
         }
     }
 

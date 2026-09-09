@@ -308,6 +308,8 @@ struct FullscreenPage: View {
                     .onAppear { scheduleBarHide() }
             }
         }
+        .onAppear { page.snapshotSuspended = true }
+        .onDisappear { page.snapshotSuspended = false }
         .sheet(isPresented: $showQuickSettings) {
             QuickSettingsView(bookmarkID: page.bookmark.id,
                               zoom: $zoom, fontAdjust: $fontAdjust, desktopUA: $desktopUA)
@@ -418,6 +420,12 @@ struct PageWebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation) {
             webView.injectLoginFill()
+            page?.captureSnapshot()
+        }
+
+        /// Web 内容进程被系统回收（内存压力）→ 立刻重载，避免白屏；这是"看着像突然刷新"的常见来源
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            webView.reload()
         }
 
         // HTTP Basic Auth / Digest 自动应答
