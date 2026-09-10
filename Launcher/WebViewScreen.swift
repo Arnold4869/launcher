@@ -525,7 +525,7 @@ struct PageBottomBar: View {
                     Image(systemName: "ellipsis.circle")
                         .font(.system(size: 19))
                     Text("更多")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11, weight: .medium))
                 }
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity)
@@ -534,7 +534,10 @@ struct PageBottomBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .launcherGlass(.clear, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        // .regular（不是 .clear）：工具栏的标准玻璃材质，自带明/暗自适应底衬，
+        // .primary 文字在任何网页底色上都可辨识；.clear 只该给悬浮钮这类媒体上方小控件。
+        // 不加 tint —— 之前的蓝色 tint 既压不住底噪也让图标偏色。
+        .launcherGlass(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
         .sheet(isPresented: $showTaskSwitcher) {
@@ -583,7 +586,7 @@ struct PageBottomBar: View {
                 Image(systemName: icon)
                     .font(.system(size: 19))
                 Text(label)
-                    .font(.system(size: 10))
+                    .font(.system(size: 11, weight: .medium))
             }
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity)
