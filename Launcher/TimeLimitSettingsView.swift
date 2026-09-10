@@ -21,26 +21,26 @@ struct TimeLimitSettingsView: View {
                 HStack {
                     Text(bookmark.name).fontWeight(.semibold)
                     Spacer()
-                    Text("\u4eca\u65e5\u5df2\u7528 \(usedMin) \u5206\u949f")
+                    Text("今日已用 \(usedMin) 分钟")
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
             } header: {
-                Text("\u4e66\u7b7e")
+                Text("书签")
             }
 
             Section {
-                Toggle("\u6bcf\u65e5\u9650\u65f6", isOn: $enabled)
+                Toggle("每日限时", isOn: $enabled)
                 if enabled {
                     HStack {
-                        Text("\u6bcf\u65e5\u9650\u989d")
+                        Text("每日限额")
                         Spacer()
-                        TextField("\u5206\u949f", value: $minutes, format: .number)
+                        TextField("分钟", value: $minutes, format: .number)
                             .keyboardType(.numberPad)
                             .multilineTextAlignment(.trailing)
                             .frame(width: 70)
                             .monospacedDigit()
-                        Text("\u5206\u949f").foregroundStyle(.secondary)
+                        Text("分钟").foregroundStyle(.secondary)
                     }
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
@@ -57,27 +57,27 @@ struct TimeLimitSettingsView: View {
                             }
                         }
                     }
-                    Picker("\u8d85\u65f6\u89e3\u9501\u540e", selection: $mode) {
-                        Text("\u6e05\u96f6\u91cd\u6765").tag(0)
-                        Text("\u4eca\u5929\u4e0d\u518d\u9501").tag(1)
-                        Text("\u52a0 15 \u5206\u949f").tag(2)
+                    Picker("超时解锁后", selection: $mode) {
+                        Text("清零重来").tag(0)
+                        Text("今天不再锁").tag(1)
+                        Text("加 15 分钟").tag(2)
                     }
                     .pickerStyle(.segmented)
                 }
             } header: {
-                Text("\u4f7f\u7528\u65f6\u95f4\u9650\u5236")
+                Text("使用时间限制")
             } footer: {
-                Text("\u8d85\u65f6\u540e\u65e0\u6cd5\u8bbf\u95ee\uff0c\u89e3\u9501\u9700\u7b97\u9898 + \u7b49\u5f85 5 \u5206\u949f + \u957f\u6309\u786e\u8ba4\u3002")
+                Text("超时后无法访问，解锁需算题 + 等待 5 分钟 + 长按确认。")
             }
         }
-        .navigationTitle("\u4f7f\u7528\u65f6\u95f4")
+        .navigationTitle("使用时间")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button("\u53d6\u6d88") { dismiss() }
+                Button("取消") { dismiss() }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("\u4fdd\u5b58") { save() }.fontWeight(.semibold)
+                Button("保存") { save() }.fontWeight(.semibold)
             }
         }
         .onAppear {

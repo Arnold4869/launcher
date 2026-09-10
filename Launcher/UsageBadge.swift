@@ -18,11 +18,11 @@ struct UsageBadge: View {
             HStack(spacing: 4) {
                 Image(systemName: locked ? "lock.fill" : "hourglass")
                     .font(.system(size: 9, weight: .semibold))
-                Text(locked ? "已超时" : "\u5269 \(Int(ceil(remainSec / 60))) \u5206\u949f")
+                Text(locked ? "已超时" : "剩 \(Int(ceil(remainSec / 60))) 分钟")
                     .font(.caption2.weight(.medium))
                     .monospacedDigit()
                 Spacer()
-                Text("\u5df2\u7528 \(Int(usedSec / 60)) / \(bookmark.dailyLimitMinutes)")
+                Text("已用 \(Int(usedSec / 60)) / \(bookmark.dailyLimitMinutes)")
                     .font(.caption2)
                     .monospacedDigit()
             }
