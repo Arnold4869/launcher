@@ -194,7 +194,11 @@ struct SplitWebView: UIViewRepresentable {
         context.coordinator.page = page
         context.coordinator.onWebViewTap = onWebViewTap
         // 浏览器式：单击网页任意处唤出底部导航栏；不吞触摸
-        if onWebViewTap != nil && !(fresh.gestureRecognizers ?? []).contains(where: { $0.name == "barRevealTap" }) {
+        // 先清旧手势再挂（旧手势 target 指向已释放的旧 Coordinator，锁屏重挂后会失效）
+        for g in (fresh.gestureRecognizers ?? []) where g.name == "barRevealTap" {
+            fresh.removeGestureRecognizer(g)
+        }
+        if onWebViewTap != nil {
             let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.webViewTapped))
             tap.name = "barRevealTap"
             tap.cancelsTouchesInView = false

@@ -454,7 +454,13 @@ struct PageWebView: UIViewRepresentable {
             webView.customUserAgent = PageWebView.desktopUserAgent
         }
 
-        if edgeSwipeHome != nil && !(webView.gestureRecognizers ?? []).contains(where: { $0 is UIScreenEdgePanGestureRecognizer }) {
+        // 清掉旧手势再重挂：SwiftUI 重挂（锁屏回来等）会新建 Coordinator，
+        // 旧手势的 target 弱引用旧 Coordinator 已释放 → 点屏无反应；且 name 判断会让它跳过重挂。
+        for g in (webView.gestureRecognizers ?? []) where g is UIScreenEdgePanGestureRecognizer || g.name == "barRevealTap" {
+            webView.removeGestureRecognizer(g)
+        }
+
+        if edgeSwipeHome != nil {
             let edgeGesture = UIScreenEdgePanGestureRecognizer(
                 target: context.coordinator, action: #selector(Coordinator.edgeSwiped))
             edgeGesture.edges = .left
@@ -462,7 +468,7 @@ struct PageWebView: UIViewRepresentable {
             webView.addGestureRecognizer(edgeGesture)
         }
 
-        if onWebViewTap != nil && !(webView.gestureRecognizers ?? []).contains(where: { $0.name == "barRevealTap" }) {
+        if onWebViewTap != nil {
             // 浏览器式：单击网页任意处唤出底部导航栏；不吞触摸，网页本身的点击照常响应
             let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.webViewTapped))
             tap.name = "barRevealTap"
