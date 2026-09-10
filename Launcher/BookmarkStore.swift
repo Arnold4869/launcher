@@ -90,6 +90,26 @@ struct Bookmark: Identifiable, Codable, Hashable {
         case autoColor   // legacy 1.6.0 字段，仅迁移用
     }
 
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(urlString, forKey: .urlString)
+        try c.encode(icon, forKey: .icon)
+        try c.encode(colorIndex, forKey: .colorIndex)
+        try c.encode(scale, forKey: .scale)
+        try c.encode(fontAdjust, forKey: .fontAdjust)
+        try c.encode(desktopUA, forKey: .desktopUA)
+        try c.encode(basicAuthUser, forKey: .basicAuthUser)
+        try c.encode(basicAuthPass, forKey: .basicAuthPass)
+        try c.encode(loginUser, forKey: .loginUser)
+        try c.encode(loginPass, forKey: .loginPass)
+        try c.encode(autoSubmit, forKey: .autoSubmit)
+        try c.encode(colorMode, forKey: .colorMode)
+        try c.encode(autoColorHex, forKey: .autoColorHex)
+        try c.encode(customColorHex, forKey: .customColorHex)
+    }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
