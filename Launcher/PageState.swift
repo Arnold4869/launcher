@@ -83,6 +83,10 @@ final class PageState: ObservableObject, Identifiable {
         return (total / count) > 0.985
     }
 
+    /// 是否为当前前台全屏页。前台页不截图（阅读时避免每次翻页触发快照卡顿），
+    /// 只在切到后台/打开多任务时才截。由 WindowManager 维护。
+    var isForeground = false
+
     /// 是否已释放（下次访问 WebView 时重建并重载）
     private(set) var released = false
     private var heldWebView: WKWebView?
@@ -91,7 +95,21 @@ final class PageState: ObservableObject, Identifiable {
     /// takeSnapshot 是只读操作，不重载、不重渲染，不会引起"翻页闪烁"——
     /// 之前的闪烁根因是 pageZoom 写入（已用 lastZoom 门控修复），不是截图。
     /// 所以全屏浏览期间也要抓，多任务打开时预览图才是现成的。
+    ///
+    /// 防抖：didFinish 连环触发（小说翻页/SPA 局部刷新）会合并成一次截图，
+    /// 避免旧手机每次翻页都跑一遍「临时挂载 + 异步截图 + 像素循环 + 降采样」。
+    private var snapshotDebounce: DispatchWorkItem?
     func captureSnapshot() {
+        // 前台页跳过：阅读/翻页时 didFinish 连环触发截图会卡（旧手机尤其明显）。
+        // 前台页的预览图由「切到后台 / 打开多任务」时统一补抓（见 refreshAllSnapshots）。
+        guard !isForeground else { return }
+        snapshotDebounce?.cancel()
+        let task = DispatchWorkItem { [weak self] in self?.performSnapshot() }
+        snapshotDebounce = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: task)
+    }
+
+    private func performSnapshot() {
         let wv = webView
         let needsTempMount = wv.window == nil || wv.frame.width <= 1
         let bounds = UIScreen.main.bounds
@@ -110,15 +128,21 @@ final class PageState: ObservableObject, Identifiable {
         // 被 sheet 盖住 / 挂在屏幕外的页面，强制渲染反而抓不到（WebKit 会暂停离屏渲染），
         // 抓已提交帧才是可靠的。takeSnapshot 异步，回调里才摘离屏挂载。
         wv.takeSnapshot(with: nil) { [weak self] image, _ in
-            DispatchQueue.main.async {
-                guard let self, let image else { return }
-                if needsTempMount {
-                    wv.removeFromSuperview()
+            guard let self, let image else {
+                if needsTempMount { DispatchQueue.main.async { wv.removeFromSuperview() } }
+                return
+            }
+            // 主线程先摘离屏挂载 + 取标题（title 读取要在主线程），像素运算移后台
+            if needsTempMount { wv.removeFromSuperview() }
+            let title = wv.title ?? self.bookmark.name
+            // 空白检测（几万次像素循环）+ 降采样：全放后台线程，旧手机不卡主线程
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard !Self.isBlankSnapshot(image) else { return }
+                let thumb = Self.downscale(image)
+                DispatchQueue.main.async { [weak self] in
+                    self?.snapshot = thumb
+                    self?.pageTitle = title
                 }
-                // 空白图检测：页面还没渲染完就抓 → 纯白图。丢弃，UI 回退到占位渐变
-                if Self.isBlankSnapshot(image) { return }
-                self.snapshot = Self.downscale(image)
-                self.pageTitle = wv.title ?? self.bookmark.name
             }
         }
     }

@@ -6,7 +6,14 @@ final class WindowManager: ObservableObject {
         didSet { persistPages() }
     }
     @Published var fullscreenID: UUID? {
-        didSet { persistPages() }
+        didSet {
+            // 维护 isForeground 标记：只有当前全屏页是"前台"，其余全标后台。
+            // 前台页跳过截图（阅读不卡），后台页允许截图。
+            for page in pages {
+                page.isForeground = (page.id == fullscreenID)
+            }
+            persistPages()
+        }
     }
     @Published var floatingID: UUID?
     /// 悬浮窗功能开关：代码保留，暂不显示
@@ -121,6 +128,8 @@ final class WindowManager: ObservableObject {
 
     /// 打开多任务时刷新全部页面快照；未挂载过的页面先补载初始 URL
     func refreshAllSnapshots() {
+        // 打开切换器 = 切后台，前台标记先清掉，否则当前页会被 captureSnapshot 跳过、预览图永远是旧的
+        for page in pages { page.isForeground = false }
         for page in pages {
             // 打开切换器时补抓一次，兜底全屏期间可能漏掉的
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {

@@ -181,11 +181,7 @@ private struct PageCardView: View {
     @State private var dragOffset: CGFloat = 0
 
     private var cardColors: [Color] {
-        switch page.bookmark.colorMode {
-        case 1: return CardPalette.gradient(fromHex: page.bookmark.autoColorHex) ?? CardPalette.colors(for: page.bookmark.colorIndex)
-        case 2: return CardPalette.gradient(fromHex: page.bookmark.customColorHex) ?? CardPalette.colors(for: page.bookmark.colorIndex)
-        default: return CardPalette.colors(for: page.bookmark.colorIndex)
-        }
+        CardPalette.resolvedGradient(for: page.bookmark)
     }
 
     var body: some View {
