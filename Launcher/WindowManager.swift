@@ -122,9 +122,9 @@ final class WindowManager: ObservableObject {
     /// 打开多任务时刷新全部页面快照；未挂载过的页面先补载初始 URL
     func refreshAllSnapshots() {
         for page in pages {
-            // force：即使该页正在前台（snapshotSuspended）也要抓，切换器要显示实时内容
+            // 打开切换器时补抓一次，兜底全屏期间可能漏掉的
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                page.captureSnapshot(force: true)
+                page.captureSnapshot()
             }
             // 已释放（内存紧张时卸掉的后台页）→ 重新挂载并重载，多档重试抓快照
             if page.released {
@@ -134,9 +134,9 @@ final class WindowManager: ObservableObject {
                     }
                 }
                 // 页面加载耗时不定：多档重试，空白检测会挡住还没渲染完的图
-                for (i, delay) in [1.2, 2.5, 4.5].enumerated() {
+                for delay in [1.2, 2.5, 4.5] {
                     DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak page] in
-                        page?.captureSnapshot(force: true)
+                        page?.captureSnapshot()
                     }
                 }
             }

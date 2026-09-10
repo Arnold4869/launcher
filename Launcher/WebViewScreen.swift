@@ -288,8 +288,6 @@ struct FullscreenPage: View {
                 .environmentObject(wm)
                 .environmentObject(store)
         }
-        .onAppear { page.snapshotSuspended = true }
-        .onDisappear { page.snapshotSuspended = false }
         .sheet(isPresented: $showQuickSettings) {
             QuickSettingsView(bookmarkID: page.bookmark.id,
                               zoom: $zoom, fontAdjust: $fontAdjust, desktopUA: $desktopUA)

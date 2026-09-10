@@ -73,14 +73,10 @@ final class PageState: ObservableObject, Identifiable {
     private var heldWebView: WKWebView?
 
     /// 抓当前画面到缩略图（多任务卡片用）
-    /// 正在前台全屏显示时不抓快照：截图会占用主线程，阅读翻页时可能被看成"刷一下"
-    var snapshotSuspended = false
-
-    /// 后台页的 WebView 不在视图树里（frame 为 0 / 无 window），直接截图会失败 →
-    /// 先临时挂到窗口外挂区域截完再摘下，这是多任务卡片"很少显示预览"的主因
-    func captureSnapshot(force: Bool = false) {
-        guard !snapshotSuspended || force else { return }
-
+    /// takeSnapshot 是只读操作，不重载、不重渲染，不会引起"翻页闪烁"——
+    /// 之前的闪烁根因是 pageZoom 写入（已用 lastZoom 门控修复），不是截图。
+    /// 所以全屏浏览期间也要抓，多任务打开时预览图才是现成的。
+    func captureSnapshot() {
         let wv = webView
         let needsTempMount = wv.window == nil || wv.frame.width <= 1
         let bounds = UIScreen.main.bounds
@@ -95,10 +91,10 @@ final class PageState: ObservableObject, Identifiable {
                 window.addSubview(wv)
             }
         }
-        // takeSnapshot 是异步的：必须在回调里（截图完成后）才摘离屏挂载，否则图截到一半就没了
-        var config = WKSnapshotConfiguration()
-        config.afterScreenUpdates = true
-        wv.takeSnapshot(with: config) { [weak self] image, _ in
+        // afterScreenUpdates 默认 false：抓"当前已提交的帧"，不强制下一轮渲染。
+        // 被 sheet 盖住 / 挂在屏幕外的页面，强制渲染反而抓不到（WebKit 会暂停离屏渲染），
+        // 抓已提交帧才是可靠的。takeSnapshot 异步，回调里才摘离屏挂载。
+        wv.takeSnapshot(with: nil) { [weak self] image, _ in
             DispatchQueue.main.async {
                 guard let self, let image else { return }
                 if needsTempMount {
