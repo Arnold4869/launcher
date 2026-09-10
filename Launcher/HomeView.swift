@@ -26,7 +26,7 @@ struct HomeView: View {
                             .foregroundStyle(.tertiary)
                         Text("还没有书签")
                             .foregroundStyle(.secondary)
-                        Text("点右上角 + 添加第一个")
+                        Text("点下方 + 卡片添加第一个")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
@@ -57,6 +57,10 @@ struct HomeView: View {
                                     }
                                 }
                             }
+                            // 末尾大加号卡片：跟书签同尺寸，一眼知道是添加
+                            AddBookmarkCard(cardHeight: CGFloat(cardHeight)) {
+                                showAdd = true
+                            }
                         }
                         .padding()
                     }
@@ -69,35 +73,6 @@ struct HomeView: View {
                     .environmentObject(store)
             }
             .navigationTitle("Launcher")
-            .toolbar {
-                                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        ShareLink(item: store.exportURL(),
-                                  preview: SharePreview("launcher-bookmarks.json")) {
-                            Label("导出书签", systemImage: "square.and.arrow.up")
-                        }
-                        Button {
-                            showImporter = true
-                        } label: {
-                            Label("导入书签", systemImage: "square.and.arrow.down")
-                        }
-                        Button {
-                            showSettings = true
-                        } label: {
-                            Label("设置", systemImage: "gearshape")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showAdd = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                }
-            }
             .sheet(isPresented: $showAdd) {
                 BookmarkEditView(store: store, bookmark: nil)
             }
@@ -181,6 +156,31 @@ struct BookmarkCard: View {
                 .padding(6)
             }
         }
+    }
+}
+
+/// 添加书签卡片：跟书签同尺寸的虚线框 + 大加号，一眼知道是「新建」
+struct AddBookmarkCard: View {
+    var cardHeight: CGFloat = 100
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 5]))
+                    .foregroundStyle(.secondary.opacity(0.55))
+                    .background(
+                        RoundedRectangle(cornerRadius: 18)
+                            .fill(Color.secondary.opacity(0.06))
+                    )
+                    .frame(height: cardHeight)
+                Image(systemName: "plus")
+                    .font(.system(size: max(24, cardHeight * 0.34), weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 

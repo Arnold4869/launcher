@@ -115,7 +115,36 @@ struct BookmarkEditView: View {
                         }
                     }
                     if timeLimitEnabled {
-                        Stepper("每日限额: \(dailyLimitMinutes) 分钟", value: $dailyLimitMinutes, in: 5...720, step: 5)
+                        // 直接输入分钟数（数字键盘），不再只能 5 分钟一跳
+                        HStack {
+                            Text("每日限额")
+                            Spacer()
+                            TextField("分钟", value: $dailyLimitMinutes, format: .number)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 70)
+                                .monospacedDigit()
+                            Text("分钟")
+                                .foregroundStyle(.secondary)
+                        }
+                        // 常用档位快捷选择
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach([15, 30, 45, 60, 90, 120, 180, 240], id: \.self) { m in
+                                    Button {
+                                        dailyLimitMinutes = m
+                                    } label: {
+                                        Text("\(m)")
+                                            .font(.subheadline.monospacedDigit())
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 6)
+                                            .background(dailyLimitMinutes == m ? Color.accentColor : Color(.secondarySystemBackground), in: Capsule())
+                                            .foregroundStyle(dailyLimitMinutes == m ? .white : .primary)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
                         Picker("超时解锁后", selection: $unlockMode) {
                             Text("清零重来").tag(0)
                             Text("今天不再锁").tag(1)
@@ -250,7 +279,7 @@ struct BookmarkEditView: View {
             autoColorHex: autoColorHex,
             customColorHex: customColorHex,
             timeLimitEnabled: timeLimitEnabled,
-            dailyLimitMinutes: dailyLimitMinutes,
+            dailyLimitMinutes: min(max(dailyLimitMinutes, 1), 1440),
             unlockMode: unlockMode
         )
         if let idx = store.bookmarks.firstIndex(where: { $0.id == bm.id }) {

@@ -14,6 +14,9 @@ struct TaskSwitcherView: View {
     /// 待配对的第一半（选了上半屏等待下半屏时非 nil）
     @State private var pendingTop: Bookmark?
     @State private var pendingTopPage: PageState?
+    /// 长按菜单入口：编辑书签 / 使用时间设置
+    @State private var editingBookmark: Bookmark?
+    @State private var timeLimitBookmark: Bookmark?
 
     var body: some View {
         NavigationStack {
@@ -58,7 +61,9 @@ struct TaskSwitcherView: View {
                                                  isPending: pendingTop?.id == page.bookmark.id,
                                                  onTap: { handleMainTap(page) },
                                                  onSplit: { handleSplitTap(page) },
-                                                 onClose: { wm.closePage(page.id) })
+                                                 onClose: { wm.closePage(page.id) },
+                                                 onEdit: { editingBookmark = page.bookmark },
+                                                 onTimeLimit: { timeLimitBookmark = page.bookmark })
                                         .id(page.id)
                                 }
                             }
@@ -82,6 +87,14 @@ struct TaskSwitcherView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("完成") { pendingTop = nil; pendingTopPage = nil; dismiss() }
+                }
+            }
+            .sheet(item: $editingBookmark) { bm in
+                BookmarkEditView(store: store, bookmark: bm)
+            }
+            .sheet(item: $timeLimitBookmark) { bm in
+                NavigationStack {
+                    TimeLimitSettingsView(store: store, bookmark: bm)
                 }
             }
         }
@@ -177,6 +190,8 @@ private struct PageCardView: View {
     let onTap: () -> Void
     let onSplit: () -> Void
     let onClose: () -> Void
+    let onEdit: () -> Void
+    let onTimeLimit: () -> Void
 
     @State private var dragOffset: CGFloat = 0
 
@@ -227,6 +242,12 @@ private struct PageCardView: View {
                 }
             }
 
+            // 时间信息（设了限时的书签才显示）：已用/限额 + 进度条
+            if page.bookmark.timeLimitEnabled {
+                UsageBadge(bookmark: page.bookmark)
+                    .frame(width: 170)
+            }
+
             Text(page.pageTitle.isEmpty ? page.bookmark.name : page.pageTitle)
                 .font(.subheadline.weight(.medium))
                 .lineLimit(1)
@@ -242,6 +263,16 @@ private struct PageCardView: View {
                 onSplit()
             } label: {
                 Label(isPending ? "取消分屏" : "分屏", systemImage: "rectangle.split.2x1")
+            }
+            Button {
+                onEdit()
+            } label: {
+                Label("编辑书签", systemImage: "pencil")
+            }
+            Button {
+                onTimeLimit()
+            } label: {
+                Label(page.bookmark.timeLimitEnabled ? "使用时间设置" : "设置使用时间", systemImage: "hourglass")
             }
         }
         // 上滑关闭（类 iOS 后台卡片）：跟手拖动，越过阈值松手关闭
