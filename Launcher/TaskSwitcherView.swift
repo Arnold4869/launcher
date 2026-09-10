@@ -198,7 +198,7 @@ private struct PageCardView: View {
                 .frame(width: 170)
         }
         .offset(y: dragOffset)
-        .opacity(dragOffset < 0 ? 1 + dragOffset / 400 : 1)   // 上滑逐渐淡出
+        .opacity(dragOffset < 0 ? CGFloat(1) + dragOffset / CGFloat(400) : CGFloat(1))   // 上滑逐渐淡出
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         // 长按出现操作：分屏（关闭改上滑手势）

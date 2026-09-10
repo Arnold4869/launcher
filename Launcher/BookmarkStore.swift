@@ -83,6 +83,13 @@ struct Bookmark: Identifiable, Codable, Hashable {
         self.customColorHex = customColorHex
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case id, name, urlString, icon, colorIndex, scale, fontAdjust, desktopUA
+        case basicAuthUser, basicAuthPass, loginUser, loginPass, autoSubmit
+        case colorMode, autoColorHex, customColorHex
+        case autoColor   // legacy 1.6.0 字段，仅迁移用
+    }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
