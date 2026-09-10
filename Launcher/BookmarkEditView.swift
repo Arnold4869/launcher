@@ -17,15 +17,16 @@ struct BookmarkEditView: View {
     @State private var loginUser: String = ""
     @State private var loginPass: String = ""
     @State private var autoSubmit: Bool = true
-    @State private var autoColor: Bool = false
+    @State private var colorMode: Int = 0
     @State private var autoColorHex: String = ""
+    @State private var customColorHex: String = ""
     @State private var generatingColor = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("基本信息") {
-                    // 卡片颜色预览：autoColor 开时用网页品牌色渐变
+                    // 卡片颜色预览
                     ZStack {
                         RoundedRectangle(cornerRadius: 18)
                             .fill(LinearGradient(colors: previewColors,
@@ -37,18 +38,27 @@ struct BookmarkEditView: View {
                             .foregroundStyle(.white)
                     }
                     .onTapGesture {
-                        if !autoColor { colorIndex = CardPalette.randomIndex() }
+                        if colorMode == 0 { colorIndex = CardPalette.randomIndex() }
                     }
-                    Text(autoColor ? "颜色来自网页图标" : "点卡片换颜色")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
 
-                    // 从网页图标取色（新功能，默认关闭，不动老换色）
-                    Toggle("匹配网页图标色", isOn: $autoColor)
-                        .onChange(of: autoColor) { on in
-                            if on { generateFromFavicon() } else { autoColorHex = "" }
+                    // 三种取色方式
+                    Picker("取色方式", selection: $colorMode) {
+                        Text("随机色").tag(0)
+                        Text("网页图标色").tag(1)
+                        Text("自定义").tag(2)
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: colorMode) { mode in
+                        if mode == 1 && autoColorHex.isEmpty { generateFromFavicon() }
+                    }
+
+                    if colorMode == 0 {
+                        Button {
+                            colorIndex = CardPalette.randomIndex()
+                        } label: {
+                            Label("换一个随机色", systemImage: "shuffle")
                         }
-                    if autoColor {
+                    } else if colorMode == 1 {
                         Button {
                             generateFromFavicon()
                         } label: {
@@ -58,10 +68,16 @@ struct BookmarkEditView: View {
                                     Text("提取中…")
                                 }
                             } else {
-                                Text("重新生成颜色")
+                                Label("重新从图标取色", systemImage: "arrow.clockwise")
                             }
                         }
                         .disabled(generatingColor)
+                    } else {
+                        // 自定义取色：ColorPicker + 预设色板
+                        ColorPicker("选择颜色", selection: Binding(
+                            get: { Color(hex: customColorHex.isEmpty ? "3B82F6" : customColorHex) },
+                            set: { c in customColorHex = UIColor(c).hexString() }
+                        ))
                     }
 
                     TextField("名称", text: $name)
@@ -146,13 +162,17 @@ struct BookmarkEditView: View {
         loginUser = bm.loginUser
         loginPass = bm.loginPass
         autoSubmit = bm.autoSubmit
-        autoColor = bm.autoColor
+        colorMode = bm.colorMode
         autoColorHex = bm.autoColorHex
+        customColorHex = bm.customColorHex
     }
 
     private var previewColors: [Color] {
-        if autoColor, let g = CardPalette.autoGradient(fromHex: autoColorHex) { return g }
-        return CardPalette.colors(for: colorIndex)
+        switch colorMode {
+        case 1: return CardPalette.gradient(fromHex: autoColorHex) ?? CardPalette.colors(for: colorIndex)
+        case 2: return CardPalette.gradient(fromHex: customColorHex) ?? CardPalette.colors(for: colorIndex)
+        default: return CardPalette.colors(for: colorIndex)
+        }
     }
 
     private func generateFromFavicon() {
@@ -187,8 +207,9 @@ struct BookmarkEditView: View {
             loginUser: loginUser,
             loginPass: loginPass,
             autoSubmit: autoSubmit,
-            autoColor: autoColor,
-            autoColorHex: autoColorHex
+            colorMode: colorMode,
+            autoColorHex: autoColorHex,
+            customColorHex: customColorHex
         )
         if let idx = store.bookmarks.firstIndex(where: { $0.id == bm.id }) {
             store.bookmarks[idx] = bm

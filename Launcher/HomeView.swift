@@ -142,9 +142,17 @@ struct BookmarkCard: View {
     var cardHeight: CGFloat = 100
     var fontScale: CGFloat = 1.0   // 字体缩放，设置页可调
 
+    /// 按 colorMode 解析卡片渐变：0随机 / 1图标取色 / 2自定义取色
+    static func resolveColors(_ bm: Bookmark) -> [Color] {
+        switch bm.colorMode {
+        case 1: return CardPalette.gradient(fromHex: bm.autoColorHex) ?? CardPalette.colors(for: bm.colorIndex)
+        case 2: return CardPalette.gradient(fromHex: bm.customColorHex) ?? CardPalette.colors(for: bm.colorIndex)
+        default: return CardPalette.colors(for: bm.colorIndex)
+        }
+    }
+
     var body: some View {
-        // autoColor 开时用网页品牌色渐变，否则用随机色
-        let colors = (bm.autoColor ? CardPalette.autoGradient(fromHex: bm.autoColorHex) : nil) ?? CardPalette.colors(for: bm.colorIndex)
+        let colors = Self.resolveColors(bm)
         // 同色相渐变 + 中性细阴影（不挂彩色阴影，避免 AI 味）
         ZStack {
             RoundedRectangle(cornerRadius: 18)

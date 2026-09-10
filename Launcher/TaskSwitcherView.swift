@@ -154,6 +154,8 @@ private struct PageCardView: View {
     let onSplit: () -> Void
     let onClose: () -> Void
 
+    @State private var dragOffset: CGFloat = 0
+
     var body: some View {
         VStack(spacing: 10) {
             ZStack(alignment: .topTrailing) {
@@ -188,7 +190,6 @@ private struct PageCardView: View {
                             .padding(6)
                     }
                 }
-
             }
 
             Text(page.pageTitle.isEmpty ? page.bookmark.name : page.pageTitle)
@@ -196,20 +197,32 @@ private struct PageCardView: View {
                 .lineLimit(1)
                 .frame(width: 170)
         }
+        .offset(y: dragOffset)
+        .opacity(dragOffset < 0 ? 1 + dragOffset / 400 : 1)   // 上滑逐渐淡出
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
-        // 长按才出现操作：分屏 / 关闭
+        // 长按出现操作：分屏（关闭改上滑手势）
         .contextMenu {
             Button {
                 onSplit()
             } label: {
                 Label(isPending ? "取消分屏" : "分屏", systemImage: "rectangle.split.2x1")
             }
-            Button(role: .destructive) {
-                onClose()
-            } label: {
-                Label("关闭", systemImage: "xmark")
-            }
         }
+        // 上滑关闭（类 iOS 后台卡片）：跟手拖动，越过阈值松手关闭
+        .gesture(
+            DragGesture(minimumDistance: 10)
+                .onChanged { v in
+                    if v.translation.height < 0 { dragOffset = v.translation.height }
+                }
+                .onEnded { v in
+                    if v.translation.height < -80 {
+                        withAnimation(.easeOut(duration: 0.15)) { dragOffset = -400 }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { onClose() }
+                    } else {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { dragOffset = 0 }
+                    }
+                }
+        )
     }
 }

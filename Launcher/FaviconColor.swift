@@ -37,7 +37,9 @@ enum FaviconColor {
         }.resume()
     }
 
-    /// 16×16 采样，跳过透明像素，平均出不透明像素的主色
+    /// 16×16 采样取主色。
+    /// 关键：跳过透明 + 白底 + 灰像素，只保留"有色彩"的像素取平均（否则白底把彩色 logo 平均成灰白）。
+    /// 若图标是单色（纯黑/纯色 logo on 白底），退回到"非白非透明"像素平均。
     static func dominantColor(of image: UIImage) -> UIColor? {
         guard let cg = image.cgImage else { return nil }
         let w = 16, h = 16
@@ -50,18 +52,53 @@ enum FaviconColor {
         ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
         guard let data = ctx.data else { return nil }
         let ptr = data.bindMemory(to: UInt8.self, capacity: w * h * 4)
-        var r = 0.0, g = 0.0, b = 0.0, count = 0.0
+
+        func isWhiteOrGray(_ r: Int, _ g: Int, _ b: Int) -> Bool {
+            let mx = max(r, g, b), mn = min(r, g, b)
+            return (mx - mn) < 24 && mx > 210          // 接近白或接近灰
+        }
+        func isTransparent(_ a: Int) -> Bool { a < 128 }
+
+        // 第一遍：彩色像素（饱和，非白非灰非透明）
+        var cr = 0.0, cg2 = 0.0, cb = 0.0, cc = 0.0
+        // 第二遍兜底：非白非透明（单色 logo）
+        var fr = 0.0, fg2 = 0.0, fb = 0.0, fc = 0.0
         for i in 0..<(w * h) {
             let o = i * 4
-            if Double(ptr[o + 3]) / 255 < 0.5 { continue }   // 跳过透明像素
-            r += Double(ptr[o + 0]); g += Double(ptr[o + 1]); b += Double(ptr[o + 2]); count += 1
+            let r = Int(ptr[o + 0]), g = Int(ptr[o + 1]), b = Int(ptr[o + 2]), a = Int(ptr[o + 3])
+            if isTransparent(a) { continue }
+            if isWhiteOrGray(r, g, b) { continue }
+            cr += Double(r); cg2 += Double(g); cb += Double(b); cc += 1
         }
-        guard count > 0 else { return nil }
-        return UIColor(red: r / count / 255, green: g / count / 255, blue: b / count / 255, alpha: 1)
+        if cc >= 2 {
+            return UIColor(red: cr / cc / 255, green: cg2 / cc / 255, blue: cb / cc / 255, alpha: 1)
+        }
+        // 兜底：没有足够彩色像素，用非白非透明像素（处理黑白单色图标）
+        for i in 0..<(w * h) {
+            let o = i * 4
+            let r = Int(ptr[o + 0]), g = Int(ptr[o + 1]), b = Int(ptr[o + 2]), a = Int(ptr[o + 3])
+            if isTransparent(a) { continue }
+            let mx = max(r, g, b)
+            if mx < 225 {   // 排除近白像素
+                fr += Double(r); fg2 += Double(g); fb += Double(b); fc += 1
+            }
+        }
+        guard fc > 0 else { return nil }
+        return UIColor(red: fr / fc / 255, green: fg2 / fc / 255, blue: fb / fc / 255, alpha: 1)
     }
 }
 
 // MARK: - 颜色工具
+
+#if canImport(SwiftUI)
+import SwiftUI
+extension UIColor {
+    /// SwiftUI Color → UIColor（ColorPicker 回调用）
+    convenience init(_ color: Color) {
+        self.init(cgColor: color.cgColor ?? UIColor.clear.cgColor)
+    }
+}
+#endif
 
 extension UIColor {
     convenience init?(hex: String) {
