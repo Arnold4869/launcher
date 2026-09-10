@@ -43,6 +43,21 @@ final class PageState: ObservableObject, Identifiable {
         wv?.loadHTMLString("", baseURL: nil)
     }
 
+    /// 快照降采样到缩略图尺寸：多任务卡片最多几百 pt 宽，存完整屏图（一张几 MB）纯浪费内存，
+    /// 旧手机 4 张快照就是十几 MB，内存一紧张就被系统回收进程 → 突然刷新。缩略图一张几十 KB。
+    static func downscale(_ image: UIImage, maxWidth: CGFloat = 420) -> UIImage {
+        let w = image.size.width * image.scale
+        let h = image.size.height * image.scale
+        guard w > maxWidth else { return image }
+        let ratio = maxWidth / w
+        let newSize = CGSize(width: maxWidth, height: h * ratio)
+        let fmt = UIGraphicsImageRendererFormat()
+        fmt.scale = 1          // 缩略图不需要 retina，直接 1x
+        fmt.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: newSize, format: fmt)
+        return renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: newSize)) }
+    }
+
     /// 空白快照检测：采样像素，全白或全透明（页面没渲染完）返回 true
     static func isBlankSnapshot(_ image: UIImage) -> Bool {
         guard let cg = image.cgImage else { return true }
@@ -102,7 +117,7 @@ final class PageState: ObservableObject, Identifiable {
                 }
                 // 空白图检测：页面还没渲染完就抓 → 纯白图。丢弃，UI 回退到占位渐变
                 if Self.isBlankSnapshot(image) { return }
-                self.snapshot = image
+                self.snapshot = Self.downscale(image)
                 self.pageTitle = wv.title ?? self.bookmark.name
             }
         }

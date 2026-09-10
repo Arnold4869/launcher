@@ -142,13 +142,9 @@ struct BookmarkCard: View {
     var cardHeight: CGFloat = 100
     var fontScale: CGFloat = 1.0   // 字体缩放，设置页可调
 
-    /// 按 colorMode 解析卡片渐变：0随机 / 1图标取色 / 2自定义取色
+    /// 按 colorMode 解析卡片渐变：0随机 / 1图标取色 / 2自定义取色（走缓存）
     static func resolveColors(_ bm: Bookmark) -> [Color] {
-        switch bm.colorMode {
-        case 1: return CardPalette.gradient(fromHex: bm.autoColorHex) ?? CardPalette.colors(for: bm.colorIndex)
-        case 2: return CardPalette.gradient(fromHex: bm.customColorHex) ?? CardPalette.colors(for: bm.colorIndex)
-        default: return CardPalette.colors(for: bm.colorIndex)
-        }
+        CardPalette.resolvedGradient(for: bm)
     }
 
     var body: some View {

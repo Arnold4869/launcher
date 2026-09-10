@@ -34,6 +34,29 @@ enum CardPalette {
         let bottom = UIColor(hue: h, saturation: min(s * 1.0, 1), brightness: max(br * 0.65, 0.2), alpha: 1)
         return [Color(top), Color(bottom)]
     }
+
+    // 渐变解析缓存：旧手机滚动书签网格时每帧重算 getHue 是浪费。
+    // 键 = colorMode|hex|colorIndex，值 = 渐变数组（Color 是轻量值类型，缓存安全）。
+    private static var gradientCache: [String: [Color]] = [:]
+
+    /// 按书签的 colorMode 解析卡片渐变（BookmarkCard 唯一入口，带缓存）
+    static func resolvedGradient(for bm: Bookmark) -> [Color] {
+        let key: String
+        switch bm.colorMode {
+        case 1: key = "1|\(bm.autoColorHex)"
+        case 2: key = "2|\(bm.customColorHex)"
+        default: key = "0|\(bm.colorIndex)"
+        }
+        if let hit = gradientCache[key] { return hit }
+        let g: [Color]
+        switch bm.colorMode {
+        case 1: g = autoGradient(fromHex: bm.autoColorHex) ?? colors(for: bm.colorIndex)
+        case 2: g = autoGradient(fromHex: bm.customColorHex) ?? colors(for: bm.colorIndex)
+        default: g = colors(for: bm.colorIndex)
+        }
+        gradientCache[key] = g
+        return g
+    }
 }
 
 /// 每行列数（全局设置，持久化到 UserDefaults）
@@ -177,10 +200,14 @@ final class BookmarkStore: ObservableObject {
         }
         var existing = Set(bookmarks.map(\.id))
         var added = 0
+        var merged = bookmarks
         for bm in imported where !existing.contains(bm.id) {
-            bookmarks.append(bm)
+            merged.append(bm)
             existing.insert(bm.id)
             added += 1
+        }
+        if added > 0 {
+            bookmarks = merged   // 一次性赋值，didSet 只写一次盘（导入 N 个不会写 N 次）
         }
         return added
     }
