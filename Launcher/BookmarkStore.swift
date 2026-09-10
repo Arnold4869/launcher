@@ -19,6 +19,17 @@ enum CardPalette {
     static func randomIndex() -> Int {
         Int.random(in: 0..<gradients.count)
     }
+
+    /// 由品牌主色 hex 生成同色相渐变（顶亮底暗）
+    static func autoGradient(fromHex hex: String) -> [Color]? {
+        guard let base = UIColor(hex: hex) else { return nil }
+        var h: CGFloat = 0, s: CGFloat = 0, br: CGFloat = 0, a: CGFloat = 0
+        guard base.getHue(&h, saturation: &s, brightness: &br, alpha: &a) else { return nil }
+        // 顶：提亮；底：压暗，保持同色相
+        let top = UIColor(hue: h, saturation: min(s * 0.85, 1), brightness: min(br * 1.15, 1), alpha: 1)
+        let bottom = UIColor(hue: h, saturation: min(s * 1.0, 1), brightness: max(br * 0.65, 0.2), alpha: 1)
+        return [Color(top), Color(bottom)]
+    }
 }
 
 /// 每行列数（全局设置，持久化到 UserDefaults）
@@ -40,12 +51,15 @@ struct Bookmark: Identifiable, Codable, Hashable {
     var loginUser: String = ""     // 网页登录表单自动填充用户名（空 = 不启用）
     var loginPass: String = ""     // 网页登录表单自动填充密码
     var autoSubmit: Bool = true    // 自动填充后自动提交登录（回车/点登录钮）
+    var autoColor: Bool = false    // 从网页图标提取的品牌色做卡片背景（true 时覆盖 colorIndex）
+    var autoColorHex: String = ""  // 提取到的品牌主色（RRGGBB）
 
     // 自定义解码：旧 json 缺新字段时用默认值，避免 decode 整体失败丢书签
     init(id: UUID = UUID(), name: String = "", urlString: String = "https://", icon: String = "🌐",
          colorIndex: Int = CardPalette.randomIndex(), scale: Double = 1.0, fontAdjust: Double = 0,
          desktopUA: Bool = false, basicAuthUser: String = "", basicAuthPass: String = "",
-         loginUser: String = "", loginPass: String = "", autoSubmit: Bool = true) {
+         loginUser: String = "", loginPass: String = "", autoSubmit: Bool = true,
+         autoColor: Bool = false, autoColorHex: String = "") {
         self.id = id
         self.name = name
         self.urlString = urlString
@@ -59,6 +73,8 @@ struct Bookmark: Identifiable, Codable, Hashable {
         self.loginUser = loginUser
         self.loginPass = loginPass
         self.autoSubmit = autoSubmit
+        self.autoColor = autoColor
+        self.autoColorHex = autoColorHex
     }
 
     init(from decoder: Decoder) throws {
@@ -76,6 +92,8 @@ struct Bookmark: Identifiable, Codable, Hashable {
         loginUser = try c.decodeIfPresent(String.self, forKey: .loginUser) ?? ""
         loginPass = try c.decodeIfPresent(String.self, forKey: .loginPass) ?? ""
         autoSubmit = try c.decodeIfPresent(Bool.self, forKey: .autoSubmit) ?? true
+        autoColor = try c.decodeIfPresent(Bool.self, forKey: .autoColor) ?? false
+        autoColorHex = try c.decodeIfPresent(String.self, forKey: .autoColorHex) ?? ""
     }
 }
 

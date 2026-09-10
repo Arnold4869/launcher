@@ -143,7 +143,8 @@ struct BookmarkCard: View {
     var fontScale: CGFloat = 1.0   // 字体缩放，设置页可调
 
     var body: some View {
-        let colors = CardPalette.colors(for: bm.colorIndex)
+        // autoColor 开时用网页品牌色渐变，否则用随机色
+        let colors = (bm.autoColor ? CardPalette.autoGradient(fromHex: bm.autoColorHex) : nil) ?? CardPalette.colors(for: bm.colorIndex)
         // 同色相渐变 + 中性细阴影（不挂彩色阴影，避免 AI 味）
         ZStack {
             RoundedRectangle(cornerRadius: 18)

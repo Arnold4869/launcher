@@ -189,25 +189,6 @@ private struct PageCardView: View {
                     }
                 }
 
-                VStack(spacing: 8) {
-                    Button(action: onSplit) {
-                        Image(systemName: "rectangle.split.2x1")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 26, height: 26)
-                            .background(.black.opacity(0.55), in: Circle())
-                    }
-                    .accessibilityLabel(isPending ? "取消" : "分屏")
-                    Button(action: onClose) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 26, height: 26)
-                            .background(.black.opacity(0.55), in: Circle())
-                    }
-                    .accessibilityLabel("关闭")
-                }
-                .padding(6)
             }
 
             Text(page.pageTitle.isEmpty ? page.bookmark.name : page.pageTitle)
@@ -215,6 +196,20 @@ private struct PageCardView: View {
                 .lineLimit(1)
                 .frame(width: 170)
         }
+        .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
+        // 长按才出现操作：分屏 / 关闭
+        .contextMenu {
+            Button {
+                onSplit()
+            } label: {
+                Label(isPending ? "取消分屏" : "分屏", systemImage: "rectangle.split.2x1")
+            }
+            Button(role: .destructive) {
+                onClose()
+            } label: {
+                Label("关闭", systemImage: "xmark")
+            }
+        }
     }
 }

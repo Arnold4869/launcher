@@ -17,26 +17,52 @@ struct BookmarkEditView: View {
     @State private var loginUser: String = ""
     @State private var loginPass: String = ""
     @State private var autoSubmit: Bool = true
+    @State private var autoColor: Bool = false
+    @State private var autoColorHex: String = ""
+    @State private var generatingColor = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("基本信息") {
-                    // 卡片颜色预览，点击换色
+                    // 卡片颜色预览：autoColor 开时用网页品牌色渐变
                     ZStack {
-                        RoundedRectangle(cornerRadius: 22)
-                            .fill(LinearGradient(colors: CardPalette.colors(for: colorIndex),
-                                                 startPoint: .topLeading,
-                                                 endPoint: .bottomTrailing))
+                        RoundedRectangle(cornerRadius: 18)
+                            .fill(LinearGradient(colors: previewColors,
+                                                 startPoint: .top,
+                                                 endPoint: .bottom))
                             .frame(height: 100)
                         Text(name.isEmpty ? "预览" : name)
                             .font(.title3.bold())
                             .foregroundStyle(.white)
                     }
-                    .onTapGesture { colorIndex = CardPalette.randomIndex() }
-                    Text("点卡片换颜色")
+                    .onTapGesture {
+                        if !autoColor { colorIndex = CardPalette.randomIndex() }
+                    }
+                    Text(autoColor ? "颜色来自网页图标" : "点卡片换颜色")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    // 从网页图标取色（新功能，默认关闭，不动老换色）
+                    Toggle("匹配网页图标色", isOn: $autoColor)
+                        .onChange(of: autoColor) { on in
+                            if on { generateFromFavicon() } else { autoColorHex = "" }
+                        }
+                    if autoColor {
+                        Button {
+                            generateFromFavicon()
+                        } label: {
+                            if generatingColor {
+                                HStack(spacing: 6) {
+                                    ProgressView().controlSize(.small)
+                                    Text("提取中…")
+                                }
+                            } else {
+                                Text("重新生成颜色")
+                            }
+                        }
+                        .disabled(generatingColor)
+                    }
 
                     TextField("名称", text: $name)
                     TextField("网址", text: $urlString)
@@ -120,6 +146,26 @@ struct BookmarkEditView: View {
         loginUser = bm.loginUser
         loginPass = bm.loginPass
         autoSubmit = bm.autoSubmit
+        autoColor = bm.autoColor
+        autoColorHex = bm.autoColorHex
+    }
+
+    private var previewColors: [Color] {
+        if autoColor, let g = CardPalette.autoGradient(fromHex: autoColorHex) { return g }
+        return CardPalette.colors(for: colorIndex)
+    }
+
+    private func generateFromFavicon() {
+        generatingColor = true
+        FaviconColor.fetchColorHex(for: urlString) { hex in
+            DispatchQueue.main.async {
+                generatingColor = false
+                if let hex = hex {
+                    autoColorHex = hex
+                }
+                // 提取失败保持旧色，autoColor 仍开启但用旧渐变兜底
+            }
+        }
     }
 
     private func save() {
@@ -140,7 +186,9 @@ struct BookmarkEditView: View {
             basicAuthPass: authPass,
             loginUser: loginUser,
             loginPass: loginPass,
-            autoSubmit: autoSubmit
+            autoSubmit: autoSubmit,
+            autoColor: autoColor,
+            autoColorHex: autoColorHex
         )
         if let idx = store.bookmarks.firstIndex(where: { $0.id == bm.id }) {
             store.bookmarks[idx] = bm
