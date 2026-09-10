@@ -184,10 +184,19 @@ struct SplitWebView: UIViewRepresentable {
             config.allowsPictureInPictureMediaPlayback = true
             let wv = WKWebView(frame: .zero, configuration: config)
             wv.allowsBackForwardNavigationGestures = true
-            wv.pageZoom = bm.scale
-            if bm.desktopUA { wv.customUserAgent = PageWebView.desktopUserAgent }
-            if let url = URL(string: bm.urlString) { wv.load(URLRequest(url: url)) }
             fresh = wv
+        }
+        // 缩放 / UA：复用分支也要套用——重建出来的实例默认是 1.0 缩放 + 系统 UA
+        if fresh.pageZoom != bm.scale { fresh.pageZoom = bm.scale }
+        let wantUA = bm.desktopUA ? PageWebView.desktopUserAgent : nil
+        if fresh.customUserAgent != wantUA { fresh.customUserAgent = wantUA }
+        // 初始加载：覆盖两种情况——
+        //   ① 上面 else 新建的实例
+        //   ② if let page 复用的实例，但它可能是「刚创建 / 内存紧张释放后重建」的，url 为 nil = 从没加载过
+        // 全屏路径 PageWebView 有这个补加载（isFirstLoad = webView.url == nil），
+        // 分屏之前漏了 → 复用分支拿到未加载实例时，这一半永远白屏。
+        if fresh.url == nil, let url = URL(string: bm.urlString) {
+            fresh.load(URLRequest(url: url))
         }
         fresh.navigationDelegate = context.coordinator
         fresh.currentBookmark = bm
