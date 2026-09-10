@@ -43,6 +43,31 @@ final class PageState: ObservableObject, Identifiable {
         wv?.loadHTMLString("", baseURL: nil)
     }
 
+    /// 空白快照检测：采样像素，全白或全透明（页面没渲染完）返回 true
+    static func isBlankSnapshot(_ image: UIImage) -> Bool {
+        guard let cg = image.cgImage else { return true }
+        let w = max(1, cg.width / 8), h = max(1, cg.height / 8)
+        guard let ctx = CGContext(data: nil, width: w, height: h,
+                                  bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return true }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        guard let data = ctx.data else { return true }
+        let buf = data.bindMemory(to: UInt8.self, capacity: w * h * 4)
+        var total = 0.0, count = 0.0
+        for i in 0..<(w * h) {
+            let r = Double(buf[i * 4]), g = Double(buf[i * 4 + 1]), b = Double(buf[i * 4 + 2])
+            // 亮度接近 1（纯白）或 alpha 接近 0（透明）都算"空"
+            let a = Double(buf[i * 4 + 3])
+            if a < 8 { continue }
+            let lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+            total += lum
+            count += 1
+        }
+        guard count > 0 else { return true }
+        return (total / count) > 0.985
+    }
+
     /// 是否已释放（下次访问 WebView 时重建并重载）
     private(set) var released = false
     private var heldWebView: WKWebView?
@@ -71,12 +96,16 @@ final class PageState: ObservableObject, Identifiable {
             }
         }
         // takeSnapshot 是异步的：必须在回调里（截图完成后）才摘离屏挂载，否则图截到一半就没了
-        wv.takeSnapshot(with: nil) { [weak self] image, _ in
+        var config = WKSnapshotConfiguration()
+        config.afterScreenUpdates = true
+        wv.takeSnapshot(with: config) { [weak self] image, _ in
             DispatchQueue.main.async {
                 guard let self, let image else { return }
                 if needsTempMount {
                     wv.removeFromSuperview()
                 }
+                // 空白图检测：页面还没渲染完就抓 → 纯白图。丢弃，UI 回退到占位渐变
+                if Self.isBlankSnapshot(image) { return }
                 self.snapshot = image
                 self.pageTitle = wv.title ?? self.bookmark.name
             }

@@ -126,15 +126,18 @@ final class WindowManager: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                 page.captureSnapshot(force: true)
             }
-            // 已释放（内存紧张时卸掉的后台页）→ 重新挂载并重载一次，保证卡片有内容
+            // 已释放（内存紧张时卸掉的后台页）→ 重新挂载并重载，多档重试抓快照
             if page.released {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     if let url = URL(string: page.bookmark.urlString) {
                         page.webView.load(URLRequest(url: url))
                     }
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                    page.captureSnapshot(force: true)
+                // 页面加载耗时不定：多档重试，空白检测会挡住还没渲染完的图
+                for (i, delay) in [1.2, 2.5, 4.5].enumerated() {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak page] in
+                        page?.captureSnapshot(force: true)
+                    }
                 }
             }
         }
