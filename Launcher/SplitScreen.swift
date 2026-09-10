@@ -23,7 +23,6 @@ struct SplitViewScreen: View {
                     // 上半屏（拖到最底时关闭）
                     halfView(for: top, page: topPage)
                         .frame(height: geo.size.height * max(topFraction, 0))
-                        .overlay(alignment: .topLeading) { SplitLabel(bm: top) }
                 }
 
                 if topFraction > 0.02 && topFraction < 0.98 {
@@ -58,7 +57,6 @@ struct SplitViewScreen: View {
                 if topFraction < 0.98 {
                     // 下半屏（拖到最顶时关闭）
                     halfView(for: bottom, page: bottomPage)
-                        .overlay(alignment: .topLeading) { SplitLabel(bm: bottom) }
                 }
             }
         }
@@ -233,19 +231,6 @@ struct SplitWebView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(bm) }
 }
 
-struct SplitLabel: View {
-    let bm: Bookmark
-    var body: some View {
-        // 【玻璃 → 原生 glassEffect/.tinted】分屏标签=导航层浮标（书签名），内容不受影响
-        Text(bm.name)
-            .font(.caption.bold())
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .launcherGlass(.tinted(.blue), in: .capsule, interactive: false)
-            .padding(8)
-    }
-}
 
 /// 分屏流程：先选下半屏书签（后台已打开的页面排前面，浏览状态保留），选中后切分屏
 struct SplitFlowView: View {
