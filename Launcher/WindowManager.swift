@@ -5,6 +5,8 @@ final class WindowManager: ObservableObject {
     @Published var pages: [PageState] = [] {
         didSet { persistPages() }
     }
+    /// 被锁定（超时）的书签：非 nil 时顶层弹解锁页
+    @Published var lockedBookmark: Bookmark?
     @Published var fullscreenID: UUID? {
         didSet {
             // 维护 isForeground 标记：只有当前全屏页是"前台"，其余全标后台。
@@ -12,6 +14,7 @@ final class WindowManager: ObservableObject {
             for page in pages {
                 page.isForeground = (page.id == fullscreenID)
             }
+            updateUsageActive()
             persistPages()
         }
     }
@@ -19,11 +22,21 @@ final class WindowManager: ObservableObject {
     /// 悬浮窗功能开关：代码保留，暂不显示
     @Published var showFloating = false
     /// 分屏状态（经悬浮钮「分屏」进入）
-    @Published var splitTop: Bookmark?
-    @Published var splitBottom: Bookmark?
+    @Published var splitTop: Bookmark? { didSet { updateUsageActive() } }
+    @Published var splitBottom: Bookmark? { didSet { updateUsageActive() } }
     /// 对应半屏的后台 PageState（有则复用常驻 WebView）
     @Published var splitTopPage: PageState?
     @Published var splitBottomPage: PageState?
+    private var usageTimer: Timer?
+
+    init() {
+        // 每 5 秒检查一次当前活跃书签是否超限（超限踢回主页 + 弹解锁）
+        usageTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            self?.enforceLimits()
+        }
+        if let t = usageTimer { RunLoop.main.add(t, forMode: .common) }
+    }
+
     @Published var floatingPos: CGPoint = CGPoint(x: UIScreen.main.bounds.width - 90, y: 160)
     @Published var floatingWidth: CGFloat = 120
     // 默认高宽比 = 屏幕比例
@@ -31,6 +44,11 @@ final class WindowManager: ObservableObject {
 
     /// 打开书签：已在列表里 → 直接放大到全屏；否则新开（超过 4 个关掉最早的未显示页）
     func open(_ bm: Bookmark) {
+        // 限时锁定：超时则拦截，弹解锁页（不打开页面）
+        if UsageTracker.shared.isLocked(bm) {
+            lockedBookmark = bm
+            return
+        }
         if let page = pages.first(where: { $0.bookmark.id == bm.id }) {
             fullscreenID = page.id
             return
@@ -54,6 +72,50 @@ final class WindowManager: ObservableObject {
     /// 回主页：只关全屏层，页面状态保留
     func goHome() {
         fullscreenID = nil
+    }
+
+    // MARK: - 使用时间统计
+
+    /// 维护活跃计时书签：前台全屏 1 个 + 分屏两半
+    private func updateUsageActive() {
+        var ids = Set<UUID>()
+        if let fs = fullscreenID, let page = pages.first(where: { $0.id == fs }) {
+            ids.insert(page.bookmark.id)
+        }
+        if let t = splitTop { ids.insert(t.id) }
+        if let b = splitBottom { ids.insert(b.id) }
+        UsageTracker.shared.setActive(ids)
+    }
+
+    /// 每 5 秒：检查活跃书签是否超限。超限 → 踢回主页 + 弹解锁页
+    private func enforceLimits() {
+        // 正在解锁中不再重复弹
+        guard lockedBookmark == nil else { return }
+        if let fs = fullscreenID, let page = pages.first(where: { $0.id == fs }),
+           UsageTracker.shared.isLocked(page.bookmark) {
+            kickOut(page.bookmark)
+            return
+        }
+        if let t = splitTop, UsageTracker.shared.isLocked(t) { kickOut(t); return }
+        if let b = splitBottom, UsageTracker.shared.isLocked(b) { kickOut(b); return }
+    }
+
+    private func kickOut(_ bm: Bookmark) {
+        // 关掉该书签的全屏/分屏，回主页
+        fullscreenID = nil
+        if splitTop?.id == bm.id { splitTop = nil; splitTopPage = nil }
+        if splitBottom?.id == bm.id { splitBottom = nil; splitBottomPage = nil }
+        lockedBookmark = bm
+    }
+
+    /// 解锁通过后按 unlockMode 生效
+    func applyUnlock(_ bm: Bookmark, mode: Int) {
+        switch mode {
+        case 1: UsageTracker.shared.markUnlockedToday(bm.id)   // 今天不再锁
+        case 2: UsageTracker.shared.addBonusMinutes(15, to: bm.id, limitMinutes: bm.dailyLimitMinutes)  // 加 15 分钟
+        default: UsageTracker.shared.resetToday(bm.id)         // 清零重来
+        }
+        lockedBookmark = nil
     }
 
     /// 当前全屏页缩成悬浮窗（唯一入口，手动触发）

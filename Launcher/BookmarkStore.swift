@@ -81,13 +81,17 @@ struct Bookmark: Identifiable, Codable, Hashable {
     var colorMode: Int = 0          // 0=随机色 1=图标取色 2=自定义取色
     var autoColorHex: String = ""  // 图标取色：提取到的品牌主色（RRGGBB）
     var customColorHex: String = "" // 自定义取色：用户选的颜色（RRGGBB）
+    var timeLimitEnabled: Bool = false   // 每日限时开关
+    var dailyLimitMinutes: Int = 30      // 每日限额（分钟）
+    var unlockMode: Int = 0              // 解锁后：0=清零重来 1=今天不再锁 2=加时
 
     // 自定义解码：旧 json 缺新字段时用默认值，避免 decode 整体失败丢书签
     init(id: UUID = UUID(), name: String = "", urlString: String = "https://", icon: String = "🌐",
          colorIndex: Int = CardPalette.randomIndex(), scale: Double = 1.0, fontAdjust: Double = 0,
          desktopUA: Bool = false, basicAuthUser: String = "", basicAuthPass: String = "",
          loginUser: String = "", loginPass: String = "", autoSubmit: Bool = true,
-         colorMode: Int = 0, autoColorHex: String = "", customColorHex: String = "") {
+         colorMode: Int = 0, autoColorHex: String = "", customColorHex: String = "",
+         timeLimitEnabled: Bool = false, dailyLimitMinutes: Int = 30, unlockMode: Int = 0) {
         self.id = id
         self.name = name
         self.urlString = urlString
@@ -104,12 +108,16 @@ struct Bookmark: Identifiable, Codable, Hashable {
         self.colorMode = colorMode
         self.autoColorHex = autoColorHex
         self.customColorHex = customColorHex
+        self.timeLimitEnabled = timeLimitEnabled
+        self.dailyLimitMinutes = dailyLimitMinutes
+        self.unlockMode = unlockMode
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, urlString, icon, colorIndex, scale, fontAdjust, desktopUA
         case basicAuthUser, basicAuthPass, loginUser, loginPass, autoSubmit
         case colorMode, autoColorHex, customColorHex
+        case timeLimitEnabled, dailyLimitMinutes, unlockMode
         case autoColor   // legacy 1.6.0 字段，仅迁移用
     }
 
@@ -131,6 +139,9 @@ struct Bookmark: Identifiable, Codable, Hashable {
         try c.encode(colorMode, forKey: .colorMode)
         try c.encode(autoColorHex, forKey: .autoColorHex)
         try c.encode(customColorHex, forKey: .customColorHex)
+        try c.encode(timeLimitEnabled, forKey: .timeLimitEnabled)
+        try c.encode(dailyLimitMinutes, forKey: .dailyLimitMinutes)
+        try c.encode(unlockMode, forKey: .unlockMode)
     }
 
     init(from decoder: Decoder) throws {
@@ -151,6 +162,9 @@ struct Bookmark: Identifiable, Codable, Hashable {
         colorMode = try c.decodeIfPresent(Int.self, forKey: .colorMode) ?? 0
         autoColorHex = try c.decodeIfPresent(String.self, forKey: .autoColorHex) ?? ""
         customColorHex = try c.decodeIfPresent(String.self, forKey: .customColorHex) ?? ""
+        timeLimitEnabled = try c.decodeIfPresent(Bool.self, forKey: .timeLimitEnabled) ?? false
+        dailyLimitMinutes = try c.decodeIfPresent(Int.self, forKey: .dailyLimitMinutes) ?? 30
+        unlockMode = try c.decodeIfPresent(Int.self, forKey: .unlockMode) ?? 0
         // 兼容 1.6.0：旧字段 autoColor=true 视作图标取色
         if try c.decodeIfPresent(Bool.self, forKey: .autoColor) ?? false { colorMode = 1 }
     }

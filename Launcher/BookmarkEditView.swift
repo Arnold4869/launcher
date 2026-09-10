@@ -21,6 +21,9 @@ struct BookmarkEditView: View {
     @State private var autoColorHex: String = ""
     @State private var customColorHex: String = ""
     @State private var generatingColor = false
+    @State private var timeLimitEnabled: Bool = false
+    @State private var dailyLimitMinutes: Int = 30
+    @State private var unlockMode: Int = 0
 
     var body: some View {
         NavigationStack {
@@ -100,6 +103,23 @@ struct BookmarkEditView: View {
                 }
 
                 Section {
+                    Toggle("每日限时", isOn: $timeLimitEnabled)
+                    if timeLimitEnabled {
+                        Stepper("每日限额: \(dailyLimitMinutes) 分钟", value: $dailyLimitMinutes, in: 5...720, step: 5)
+                        Picker("超时解锁后", selection: $unlockMode) {
+                            Text("清零重来").tag(0)
+                            Text("今天不再锁").tag(1)
+                            Text("加 15 分钟").tag(2)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                } header: {
+                    Text("使用时间限制")
+                } footer: {
+                    Text("统计该书签及子链接的访问时长，超时锁定。解锁需算题 + 等待 + 长按确认。")
+                }
+
+                Section {
                     TextField("用户名", text: $authUser)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
@@ -165,6 +185,9 @@ struct BookmarkEditView: View {
         colorMode = bm.colorMode
         autoColorHex = bm.autoColorHex
         customColorHex = bm.customColorHex
+        timeLimitEnabled = bm.timeLimitEnabled
+        dailyLimitMinutes = bm.dailyLimitMinutes
+        unlockMode = bm.unlockMode
     }
 
     private var previewColors: [Color] {
@@ -209,7 +232,10 @@ struct BookmarkEditView: View {
             autoSubmit: autoSubmit,
             colorMode: colorMode,
             autoColorHex: autoColorHex,
-            customColorHex: customColorHex
+            customColorHex: customColorHex,
+            timeLimitEnabled: timeLimitEnabled,
+            dailyLimitMinutes: dailyLimitMinutes,
+            unlockMode: unlockMode
         )
         if let idx = store.bookmarks.firstIndex(where: { $0.id == bm.id }) {
             store.bookmarks[idx] = bm

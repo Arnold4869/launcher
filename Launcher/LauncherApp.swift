@@ -29,6 +29,11 @@ struct LauncherApp: App {
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
                 wm.releaseBackgroundWebViews()
             }
+            .sheet(item: $wm.lockedBookmark) { bm in
+                TimeLockUnlockView(bookmark: bm) { mode in
+                    wm.applyUnlock(bm, mode: mode)
+                }
+            }
         }
     }
 
