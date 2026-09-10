@@ -24,6 +24,7 @@ struct BookmarkEditView: View {
     @State private var timeLimitEnabled: Bool = false
     @State private var dailyLimitMinutes: Int = 30
     @State private var unlockMode: Int = 0
+    @State private var unlockBonusMinutes: Int = 15
 
     var body: some View {
         NavigationStack {
@@ -148,9 +149,36 @@ struct BookmarkEditView: View {
                         Picker("超时解锁后", selection: $unlockMode) {
                             Text("清零重来").tag(0)
                             Text("今天不再锁").tag(1)
-                            Text("加 15 分钟").tag(2)
+                            Text("加时").tag(2)
                         }
                         .pickerStyle(.segmented)
+                        if unlockMode == 2 {
+                            HStack {
+                                Text("每次解锁加时")
+                                Spacer()
+                                TextField("分钟", value: $unlockBonusMinutes, format: .number)
+                                    .keyboardType(.numberPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 70)
+                                    .monospacedDigit()
+                                Text("分钟").foregroundStyle(.secondary)
+                            }
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach([5, 10, 15, 20, 30, 45, 60], id: \.self) { m in
+                                        Button { unlockBonusMinutes = m } label: {
+                                            Text("\(m)")
+                                                .font(.subheadline.monospacedDigit())
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .background(unlockBonusMinutes == m ? Color.accentColor : Color(.secondarySystemBackground), in: Capsule())
+                                                .foregroundStyle(unlockBonusMinutes == m ? .white : .primary)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }
                     }
                 } header: {
                     Text("使用时间限制")
@@ -227,6 +255,7 @@ struct BookmarkEditView: View {
         timeLimitEnabled = bm.timeLimitEnabled
         dailyLimitMinutes = bm.dailyLimitMinutes
         unlockMode = bm.unlockMode
+        unlockBonusMinutes = bm.unlockBonusMinutes
     }
 
     private var previewColors: [Color] {
@@ -280,7 +309,8 @@ struct BookmarkEditView: View {
             customColorHex: customColorHex,
             timeLimitEnabled: timeLimitEnabled,
             dailyLimitMinutes: min(max(dailyLimitMinutes, 1), 1440),
-            unlockMode: unlockMode
+            unlockMode: unlockMode,
+            unlockBonusMinutes: min(max(unlockBonusMinutes, 1), 1440)
         )
         if let idx = store.bookmarks.firstIndex(where: { $0.id == bm.id }) {
             store.bookmarks[idx] = bm

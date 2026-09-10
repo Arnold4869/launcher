@@ -99,7 +99,7 @@ final class WindowManager: ObservableObject {
     func applyUnlock(_ bm: Bookmark, mode: Int) {
         switch mode {
         case 1: UsageTracker.shared.markUnlockedToday(bm.id)   // 今天不再锁
-        case 2: UsageTracker.shared.addBonusMinutes(15, to: bm.id, limitMinutes: bm.dailyLimitMinutes)  // 加 15 分钟
+        case 2: UsageTracker.shared.addBonusMinutes(Double(bm.unlockBonusMinutes), to: bm.id, limitMinutes: bm.dailyLimitMinutes)  // 加时 N 分钟
         default: UsageTracker.shared.resetToday(bm.id)         // 清零重来
         }
         lockedBookmark = nil

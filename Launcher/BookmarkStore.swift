@@ -84,6 +84,7 @@ struct Bookmark: Identifiable, Codable, Hashable {
     var timeLimitEnabled: Bool = false   // 每日限时开关
     var dailyLimitMinutes: Int = 30      // 每日限额（分钟）
     var unlockMode: Int = 0              // 解锁后：0=清零重来 1=今天不再锁 2=加时
+    var unlockBonusMinutes: Int = 15     // 解锁后加时分钟数（unlockMode=2 时用）
 
     // 自定义解码：旧 json 缺新字段时用默认值，避免 decode 整体失败丢书签
     init(id: UUID = UUID(), name: String = "", urlString: String = "https://", icon: String = "🌐",
@@ -91,7 +92,8 @@ struct Bookmark: Identifiable, Codable, Hashable {
          desktopUA: Bool = false, basicAuthUser: String = "", basicAuthPass: String = "",
          loginUser: String = "", loginPass: String = "", autoSubmit: Bool = true,
          colorMode: Int = 0, autoColorHex: String = "", customColorHex: String = "",
-         timeLimitEnabled: Bool = false, dailyLimitMinutes: Int = 30, unlockMode: Int = 0) {
+         timeLimitEnabled: Bool = false, dailyLimitMinutes: Int = 30, unlockMode: Int = 0,
+         unlockBonusMinutes: Int = 15) {
         self.id = id
         self.name = name
         self.urlString = urlString
@@ -111,13 +113,14 @@ struct Bookmark: Identifiable, Codable, Hashable {
         self.timeLimitEnabled = timeLimitEnabled
         self.dailyLimitMinutes = dailyLimitMinutes
         self.unlockMode = unlockMode
+        self.unlockBonusMinutes = unlockBonusMinutes
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, urlString, icon, colorIndex, scale, fontAdjust, desktopUA
         case basicAuthUser, basicAuthPass, loginUser, loginPass, autoSubmit
         case colorMode, autoColorHex, customColorHex
-        case timeLimitEnabled, dailyLimitMinutes, unlockMode
+        case timeLimitEnabled, dailyLimitMinutes, unlockMode, unlockBonusMinutes
         case autoColor   // legacy 1.6.0 字段，仅迁移用
     }
 
@@ -142,6 +145,7 @@ struct Bookmark: Identifiable, Codable, Hashable {
         try c.encode(timeLimitEnabled, forKey: .timeLimitEnabled)
         try c.encode(dailyLimitMinutes, forKey: .dailyLimitMinutes)
         try c.encode(unlockMode, forKey: .unlockMode)
+        try c.encode(unlockBonusMinutes, forKey: .unlockBonusMinutes)
     }
 
     init(from decoder: Decoder) throws {
@@ -165,6 +169,7 @@ struct Bookmark: Identifiable, Codable, Hashable {
         timeLimitEnabled = try c.decodeIfPresent(Bool.self, forKey: .timeLimitEnabled) ?? false
         dailyLimitMinutes = try c.decodeIfPresent(Int.self, forKey: .dailyLimitMinutes) ?? 30
         unlockMode = try c.decodeIfPresent(Int.self, forKey: .unlockMode) ?? 0
+        unlockBonusMinutes = try c.decodeIfPresent(Int.self, forKey: .unlockBonusMinutes) ?? 15
         // 兼容 1.6.0：旧字段 autoColor=true 视作图标取色
         if try c.decodeIfPresent(Bool.self, forKey: .autoColor) ?? false { colorMode = 1 }
     }

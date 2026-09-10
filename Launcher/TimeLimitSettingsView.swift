@@ -12,6 +12,7 @@ struct TimeLimitSettingsView: View {
     @State private var enabled: Bool = false
     @State private var minutes: Int = 30
     @State private var mode: Int = 0
+    @State private var bonusMinutes: Int = 15
 
     private var usedMin: Int { Int(tracker.secondsToday(for: bookmark.id) / 60) }
 
@@ -60,9 +61,36 @@ struct TimeLimitSettingsView: View {
                     Picker("超时解锁后", selection: $mode) {
                         Text("清零重来").tag(0)
                         Text("今天不再锁").tag(1)
-                        Text("加 15 分钟").tag(2)
+                        Text("加时").tag(2)
                     }
                     .pickerStyle(.segmented)
+                    if mode == 2 {
+                        HStack {
+                            Text("每次解锁加时")
+                            Spacer()
+                            TextField("分钟", value: $bonusMinutes, format: .number)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 70)
+                                .monospacedDigit()
+                            Text("分钟").foregroundStyle(.secondary)
+                        }
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach([5, 10, 15, 20, 30, 45, 60], id: \.self) { m in
+                                    Button { bonusMinutes = m } label: {
+                                        Text("\(m)")
+                                            .font(.subheadline.monospacedDigit())
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 6)
+                                            .background(bonusMinutes == m ? Color.accentColor : Color(.secondarySystemBackground), in: Capsule())
+                                            .foregroundStyle(bonusMinutes == m ? .white : .primary)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
                 }
             } header: {
                 Text("使用时间限制")
@@ -84,6 +112,7 @@ struct TimeLimitSettingsView: View {
             enabled = bookmark.timeLimitEnabled
             minutes = bookmark.dailyLimitMinutes
             mode = bookmark.unlockMode
+            bonusMinutes = bookmark.unlockBonusMinutes
         }
     }
 
@@ -93,6 +122,7 @@ struct TimeLimitSettingsView: View {
         bm.timeLimitEnabled = enabled
         bm.dailyLimitMinutes = min(max(minutes, 1), 1440)
         bm.unlockMode = mode
+        bm.unlockBonusMinutes = min(max(bonusMinutes, 1), 1440)
         store.bookmarks[idx] = bm
         dismiss()
     }
