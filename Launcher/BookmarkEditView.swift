@@ -105,6 +105,16 @@ struct BookmarkEditView: View {
                 Section {
                     Toggle("每日限时", isOn: $timeLimitEnabled)
                     if timeLimitEnabled {
+                        // 今日已用时长（实时）
+                        HStack {
+                            Text("今日已用")
+                            Spacer()
+                            Text(Self.usageText(for: bookmark?.id))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                    }
+                    if timeLimitEnabled {
                         Stepper("每日限额: \(dailyLimitMinutes) 分钟", value: $dailyLimitMinutes, in: 5...720, step: 5)
                         Picker("超时解锁后", selection: $unlockMode) {
                             Text("清零重来").tag(0)
@@ -196,6 +206,12 @@ struct BookmarkEditView: View {
         case 2: return CardPalette.gradient(fromHex: customColorHex) ?? CardPalette.colors(for: colorIndex)
         default: return CardPalette.colors(for: colorIndex)
         }
+    }
+
+    private static func usageText(for id: UUID?) -> String {
+        guard let id else { return "—" }
+        let s = Int(UsageTracker.shared.secondsToday(for: id) / 60)
+        return "\(s) 分钟"
     }
 
     private func generateFromFavicon() {

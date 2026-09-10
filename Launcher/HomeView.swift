@@ -164,6 +164,22 @@ struct BookmarkCard: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.6)
                 .padding(.horizontal, 12)
+
+            // 限时/已锁角标：右上角小图标，不抢视觉
+            if bm.timeLimitEnabled {
+                VStack {
+                    HStack {
+                        Spacer()
+                        Image(systemName: UsageTracker.shared.isLocked(bm) ? "lock.fill" : "hourglass")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .padding(5)
+                            .background(.black.opacity(0.25), in: Circle())
+                    }
+                    Spacer()
+                }
+                .padding(6)
+            }
         }
     }
 }
