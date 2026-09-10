@@ -2,19 +2,14 @@ import SwiftUI
 
 /// 柔和渐变色板：卡片随机取色
 enum CardPalette {
+    // iOS 系统色深变体：同色相渐变（顶亮底暗），像 iOS 主屏 app 图标，非跨色相糖果渐变
     static let gradients: [[Color]] = [
-        [Color(red: 0.55, green: 0.83, blue: 0.75), Color(red: 0.30, green: 0.66, blue: 0.60)],   // 薄荷绿
-        [Color(red: 0.60, green: 0.78, blue: 0.95), Color(red: 0.35, green: 0.55, blue: 0.85)],   // 天蓝
-        [Color(red: 0.98, green: 0.80, blue: 0.60), Color(red: 0.93, green: 0.60, blue: 0.40)],   // 暖橙
-        [Color(red: 0.80, green: 0.72, blue: 0.95), Color(red: 0.60, green: 0.50, blue: 0.85)],   // 淡紫
-        [Color(red: 0.97, green: 0.75, blue: 0.80), Color(red: 0.90, green: 0.55, blue: 0.62)],   // 粉红
-        [Color(red: 0.95, green: 0.90, blue: 0.65), Color(red: 0.88, green: 0.78, blue: 0.45)],   // 鹅黄
-        [Color(red: 0.65, green: 0.80, blue: 0.90), Color(red: 0.45, green: 0.65, blue: 0.82)],   // 雾蓝
-        [Color(red: 0.72, green: 0.88, blue: 0.65), Color(red: 0.52, green: 0.74, blue: 0.45)],   // 草绿
-        [Color(red: 0.85, green: 0.80, blue: 0.72), Color(red: 0.70, green: 0.62, blue: 0.52)],   // 米棕
-        [Color(red: 0.70, green: 0.68, blue: 0.92), Color(red: 0.52, green: 0.55, blue: 0.85)],   // 蓝紫
-        [Color(red: 0.95, green: 0.70, blue: 0.65), Color(red: 0.85, green: 0.50, blue: 0.48)],   // 珊瑚
-        [Color(red: 0.62, green: 0.85, blue: 0.85), Color(red: 0.40, green: 0.70, blue: 0.72)]    // 青碧
+        [Color(red: 0.30, green: 0.53, blue: 0.98), Color(red: 0.14, green: 0.35, blue: 0.82)],  // 蓝 (systemBlue)
+        [Color(red: 0.25, green: 0.78, blue: 0.35), Color(red: 0.12, green: 0.55, blue: 0.22)],  // 绿 (systemGreen)
+        [Color(red: 1.00, green: 0.63, blue: 0.04), Color(red: 0.85, green: 0.45, blue: 0.02)],  // 橙 (systemOrange)
+        [Color(red: 1.00, green: 0.38, blue: 0.51), Color(red: 0.85, green: 0.21, blue: 0.33)],  // 粉 (systemPink)
+        [Color(red: 0.70, green: 0.32, blue: 0.87), Color(red: 0.50, green: 0.19, blue: 0.70)],  // 紫 (systemPurple)
+        [Color(red: 0.20, green: 0.68, blue: 0.90), Color(red: 0.08, green: 0.49, blue: 0.71)]   // 青 (systemTeal)
     ]
 
     static func colors(for index: Int) -> [Color] {

@@ -21,7 +21,9 @@ struct HomeView: View {
             Group {
                 if store.bookmarks.isEmpty {
                     VStack(spacing: 12) {
-                        Text("📭").font(.system(size: 56))
+                        Image(systemName: "bookmark.slash")
+                            .font(.system(size: 44, weight: .light))
+                            .foregroundStyle(.tertiary)
                         Text("还没有书签")
                             .foregroundStyle(.secondary)
                         Text("点右上角 + 添加第一个")
@@ -142,22 +144,21 @@ struct BookmarkCard: View {
 
     var body: some View {
         let colors = CardPalette.colors(for: bm.colorIndex)
-        // 深色渐变，白字对比清晰
+        // 同色相渐变 + 中性细阴影（不挂彩色阴影，避免 AI 味）
         ZStack {
-            RoundedRectangle(cornerRadius: 22)
+            RoundedRectangle(cornerRadius: 18)
                 .fill(LinearGradient(colors: colors,
-                                     startPoint: .topLeading,
-                                     endPoint: .bottomTrailing))
-                .brightness(-0.18)
+                                     startPoint: .top,
+                                     endPoint: .bottom))
                 .frame(height: cardHeight)
-                .shadow(color: colors[1].opacity(0.35), radius: 6, x: 0, y: 3)
+                .shadow(color: .black.opacity(0.18), radius: 6, x: 0, y: 3)
             Text(bm.name)
-                .font(.system(size: max(11, cardHeight * 0.22 * fontScale), weight: .bold))
+                .font(.system(size: max(12, cardHeight * 0.20 * fontScale), weight: .semibold))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .minimumScaleFactor(0.6)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 12)
         }
     }
 }
