@@ -145,7 +145,7 @@ struct BookmarkCard: View {
                 VStack {
                     HStack {
                         Spacer()
-                        Image(systemName: UsageTracker.shared.isLocked(bm) ? "lock.fill" : "hourglass")
+                        Image(systemName: UsageBadgeCache.shared.isLocked(bm) ? "lock.fill" : "hourglass")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.9))
                             .padding(5)

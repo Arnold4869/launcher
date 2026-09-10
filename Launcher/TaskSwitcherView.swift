@@ -2,9 +2,8 @@ import SwiftUI
 
 // MARK: - 多任务切换器（类浏览器/安卓后台：横排实时快照卡片，可滑动）
 //
-// - 卡片显示页面实时缩略图（didFinish 导航后刷新）+ 标题 + 关闭钮
-// - 点卡片 = 切到该页；右上角 × = 关闭
-// - 卡片右上角「分屏」= 把该页设为分屏半屏，两步配对进分屏
+// - 卡片显示页面实时缩略图（打开切换器时补抓）+ 标题 + 使用时间条
+// - 点卡片 = 切到该页；上滑 = 关闭；长按 = 菜单（分屏/编辑/使用时间）
 // - 顶部「+」新开页面卡片 = 回到主页选书签
 
 struct TaskSwitcherView: View {
@@ -33,7 +32,7 @@ struct TaskSwitcherView: View {
                         }
                         Text("没有打开的页面")
                             .font(.title3.weight(.semibold))
-                        Text("回到主页点书签，就能在这里切换多个页面")
+                        Text("回到主页点 + 卡片开新页面，之后就能在这里切换")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)

@@ -79,10 +79,12 @@ final class UsageTracker: ObservableObject {
 
     func resetToday(_ id: UUID) {
         UserDefaults.standard.removeObject(forKey: Self.usageKey(for: id))
+        UsageBadgeCache.shared.invalidate(id)
     }
 
     func markUnlockedToday(_ id: UUID) {
         UserDefaults.standard.set(true, forKey: Self.unlockedKey(for: id))
+        UsageBadgeCache.shared.invalidate(id)
     }
 
     func unlockedToday(_ id: UUID) -> Bool {
@@ -93,6 +95,7 @@ final class UsageTracker: ObservableObject {
     func addBonusMinutes(_ minutes: Double, to id: UUID, limitMinutes: Int) {
         let target = max(0, Double(limitMinutes) - minutes) * 60
         UserDefaults.standard.set(target, forKey: Self.usageKey(for: id))
+        UsageBadgeCache.shared.invalidate(id)
     }
 
     // MARK: - keys（按天分桶，跨天自动重置）

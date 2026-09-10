@@ -22,7 +22,6 @@ struct LauncherApp: App {
                 pageLayer
             }
             .animation(.easeInOut(duration: 0.2), value: wm.fullscreenID)
-            .animation(.easeInOut(duration: 0.2), value: wm.floatingID)
             .onAppear {
                 wm.restorePages(store: store)
             }
@@ -50,7 +49,7 @@ struct LauncherApp: App {
                     PageHost(page: page, wm: wm, geo: geo)
                         .environmentObject(wm)
                         .environmentObject(store)
-                        .zIndex(page.id == wm.floatingID ? 2 : 1)
+                        .zIndex(1)
                 }
 
                 if let top = wm.splitTop, let bottom = wm.splitBottom {
