@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// 锁定解锁页：数学题 → 等 5 分钟 → 长按倒计时，两关都过才解锁。
-/// 隐藏跳过：左上角连点 10 次 + 右上角连点 10 次，即可跳过 5 分钟等待。
+/// 隐藏跳过：先过第一关（算对答案），再连点「第一步 · 算一道题」标题 10 次，
+///             接着连点「第二步 · 等 5 分钟」标题 10 次，即可跳过等待（顺序不可颠倒，可多点）。
 /// 退出 app 重进后，5 分钟等待重新计时（等待用 App 内计时器，不落盘）。
 struct TimeLockUnlockView: View {
     let bookmark: Bookmark
@@ -13,6 +14,8 @@ struct TimeLockUnlockView: View {
     @State private var b = 0
     @State private var answer = ""
     @State private var mathPassed = false
+    @State private var wrongAnswer = false
+    @FocusState private var answerFocused: Bool
 
     // 第二关：5 分钟等待（App 内计时，退出即重置）
     @State private var waitRemaining: TimeInterval = 5 * 60
@@ -24,9 +27,9 @@ struct TimeLockUnlockView: View {
     @State private var holdDone = false
     @State private var holdTimer: Timer?
 
-    // 隐藏跳过
-    @State private var topLeftTaps = 0
-    @State private var topRightTaps = 0
+    // 隐藏跳过：先连点「第一步」标题 10 次 → 再连点「第二步」标题 10 次
+    @State private var stage1Taps = 0
+    @State private var stage2Taps = 0
     @State private var skipUsed = false
 
     var body: some View {
@@ -40,7 +43,7 @@ struct TimeLockUnlockView: View {
             Divider()
 
             // 第一关：数学题
-            stageCard(title: "第一步 · 算一道题", done: mathPassed) {
+            stageCard(title: "第一步 · 算一道题", done: mathPassed, secretTag: 1) {
                 Text("\(a) × \(b) = ?")
                     .font(.system(size: 34, weight: .bold, design: .monospaced))
                 TextField("答案", text: $answer)
@@ -48,12 +51,26 @@ struct TimeLockUnlockView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 160)
                     .multilineTextAlignment(.center)
-                Button("确认") { checkMath() }
-                    .buttonStyle(.borderedProminent)
+                    .focused($answerFocused)
+                    .submitLabel(.done)
+                    .onSubmit { checkMath() }
+                if wrongAnswer {
+                    Text("答案不对，再算一次")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+                HStack(spacing: 12) {
+                    if answerFocused {
+                        Button("收起键盘") { answerFocused = false }
+                            .buttonStyle(.bordered)
+                    }
+                    Button("确认") { checkMath() }
+                        .buttonStyle(.borderedProminent)
+                }
             }
 
             // 第二关：等 5 分钟
-            stageCard(title: "第二步 · 等 5 分钟", done: waitPassed) {
+            stageCard(title: "第二步 · 等 5 分钟", done: waitPassed, secretTag: 2) {
                 if waitPassed {
                     Label("时间到", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
@@ -102,15 +119,6 @@ struct TimeLockUnlockView: View {
         }
         .padding(24)
         .background(Color(.systemGroupedBackground))
-        // 隐藏跳过：左上角 + 右上角各连点 10 次
-        .overlay(alignment: .topLeading) {
-            Color.clear.frame(width: 80, height: 80).contentShape(Rectangle())
-                .onTapGesture { secretTap(&topLeftTaps, other: topRightTaps, isLeft: true) }
-        }
-        .overlay(alignment: .topTrailing) {
-            Color.clear.frame(width: 80, height:80).contentShape(Rectangle())
-                .onTapGesture { secretTap(&topRightTaps, other: topLeftTaps, isLeft: false) }
-        }
         .onAppear {
             a = Int.random(in: 7...99); b = Int.random(in: 7...99)
         }
@@ -118,7 +126,7 @@ struct TimeLockUnlockView: View {
 
     // MARK: - 关卡视图
 
-    private func stageCard<Content: View>(title: String, done: Bool, @ViewBuilder content: () -> Content) -> some View {
+    private func stageCard<Content: View>(title: String, done: Bool, secretTag: Int? = nil, @ViewBuilder content: () -> Content) -> some View {
         VStack(spacing: 12) {
             HStack {
                 Text(title).font(.headline)
@@ -126,6 +134,11 @@ struct TimeLockUnlockView: View {
                 if done {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                 }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard let tag = secretTag else { return }
+                secretStageTap(tag)
             }
             content()
         }
@@ -136,7 +149,13 @@ struct TimeLockUnlockView: View {
     // MARK: - 逻辑
 
     private func checkMath() {
-        guard Int(answer) == a * b else { return }
+        guard Int(answer) == a * b else {
+            wrongAnswer = true
+            return
+        }
+        wrongAnswer = false
+        answerFocused = false          // 收起数字键盘
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         mathPassed = true
         waitRemaining = 5 * 60
         if skipUsed { waitPassed = true }
@@ -173,12 +192,20 @@ struct TimeLockUnlockView: View {
         dismiss()
     }
 
-    private func secretTap(_ counter: inout Int, other: Int, isLeft: Bool) {
-        guard mathPassed else { return }
-        counter += 1
-        if counter >= 10 && other >= 10 {
+    private func secretStageTap(_ tag: Int) {
+        guard mathPassed else { return }          // 第一关过了才认
+        if tag == 1 {
+            if stage2Taps < 10 { stage1Taps += 1 }
+            return
+        }
+        // 第二步：必须先点满第一步 10 次，再点第二步 10 次
+        guard stage1Taps >= 10 else { return }
+        stage2Taps += 1
+        if stage2Taps >= 10 && !skipUsed {
             skipUsed = true
             waitPassed = true
+            stage1Taps = 0
+            stage2Taps = 0
         }
     }
 
