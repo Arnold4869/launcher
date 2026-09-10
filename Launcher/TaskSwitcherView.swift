@@ -19,16 +19,35 @@ struct TaskSwitcherView: View {
         NavigationStack {
             Group {
                 if wm.pages.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "square.on.square.dashed")
-                            .font(.system(size: 40))
-                            .foregroundStyle(.tertiary)
+                    VStack(spacing: 16) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .fill(Color.accentColor.opacity(0.12))
+                                .frame(width: 96, height: 96)
+                            Image(systemName: "square.stack.3d.up")
+                                .font(.system(size: 38))
+                                .foregroundStyle(Color.accentColor)
+                        }
                         Text("没有打开的页面")
-                            .font(.headline)
-                        Text("回到主页点书签即可新开页面")
+                            .font(.title3.weight(.semibold))
+                        Text("回到主页点书签，就能在这里切换多个页面")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button {
+                            pendingTop = nil; pendingTopPage = nil
+                            wm.goHome()
+                            dismissAfter { }
+                        } label: {
+                            Label("新建页面", systemImage: "plus")
+                                .font(.headline)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -76,16 +95,21 @@ struct TaskSwitcherView: View {
             dismissAfter { }
         } label: {
             VStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(.secondarySystemGroupedBackground))
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color(.tertiarySystemGroupedBackground).opacity(0.5))
                     .frame(width: 170, height: 300)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 5]))
+                            .foregroundStyle(.secondary.opacity(0.7))
+                    )
                     .overlay {
                         Image(systemName: "plus")
-                            .font(.system(size: 36, weight: .medium))
+                            .font(.system(size: 32, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
                 Text("新开页面")
-                    .font(.footnote)
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
             }
         }
@@ -156,6 +180,14 @@ private struct PageCardView: View {
 
     @State private var dragOffset: CGFloat = 0
 
+    private var cardColors: [Color] {
+        switch page.bookmark.colorMode {
+        case 1: return CardPalette.gradient(fromHex: page.bookmark.autoColorHex) ?? CardPalette.colors(for: page.bookmark.colorIndex)
+        case 2: return CardPalette.gradient(fromHex: page.bookmark.customColorHex) ?? CardPalette.colors(for: page.bookmark.colorIndex)
+        default: return CardPalette.colors(for: page.bookmark.colorIndex)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 10) {
             ZStack(alignment: .topTrailing) {
@@ -165,19 +197,26 @@ private struct PageCardView: View {
                             .resizable()
                             .scaledToFill()
                     } else {
-                        Rectangle()
-                            .fill(Color(.secondarySystemGroupedBackground))
+                        // 占位：书签同色渐变 + 名称首字，跟主页卡片呼应
+                        LinearGradient(colors: cardColors, startPoint: .top, endPoint: .bottom)
                             .overlay {
-                                Image(systemName: "photo")
-                                    .foregroundStyle(.tertiary)
+                                Text(String(page.bookmark.name.prefix(1)))
+                                    .font(.system(size: 44, weight: .bold))
+                                    .foregroundStyle(.white)
                             }
                     }
                 }
                 .frame(width: 170, height: 300)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                // 抬升投影（iOS 后台卡片质感），不用 hairline 灰描边
+                .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 5)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(isPending ? Color.blue : Color.black.opacity(0.15), lineWidth: isPending ? 3 : 1)
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(isPending ? Color.accentColor : .clear, lineWidth: isPending ? 3 : 0)
                 )
                 .overlay(alignment: .topLeading) {
                     if isPending {
@@ -185,15 +224,15 @@ private struct PageCardView: View {
                             .font(.caption2.bold())
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(.blue, in: Capsule())
+                            .background(Color.accentColor, in: Capsule())
                             .foregroundStyle(.white)
-                            .padding(6)
+                            .padding(8)
                     }
                 }
             }
 
             Text(page.pageTitle.isEmpty ? page.bookmark.name : page.pageTitle)
-                .font(.footnote)
+                .font(.subheadline.weight(.medium))
                 .lineLimit(1)
                 .frame(width: 170)
         }
