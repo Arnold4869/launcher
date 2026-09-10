@@ -124,17 +124,12 @@ struct QuickSettingsView: View {
                     }
                     Toggle("桌面版页面 (UA)", isOn: $desktopUA)
                 }
-                Section {
-                    // 【系统原生玻璃 → .glassProminent】Form 内主行动按钮
-                    Button("完成") { saveAndDismiss() }
-                        .fontWeight(.semibold)
-                }
             }
             .navigationTitle("快捷设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("关闭") { saveAndDismiss() }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { saveAndDismiss() }
                 }
             }
             .onDisappear { save() }
@@ -153,6 +148,44 @@ struct QuickSettingsView: View {
     private func saveAndDismiss() {
         save()
         dismiss()
+    }
+}
+
+/// 分屏页快捷设置：直接读写书签字段（store 是 @Published，改动即时反映到 SplitWebView 并永久保存）
+struct SplitQuickSettingsView: View {
+    let bookmarkID: UUID
+    @EnvironmentObject var store: BookmarkStore
+    @Environment(\.dismiss) private var dismiss
+
+    private var index: Int? { store.bookmarks.firstIndex(where: { $0.id == bookmarkID }) }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if let i = index {
+                    Section("页面属性 (实时生效，自动保存)") {
+                        VStack(alignment: .leading) {
+                            Text("页面缩放: \(String(format: "%.1fx", store.bookmarks[i].scale))")
+                            Slider(value: $store.bookmarks[i].scale, in: 0.5...3.0, step: 0.1)
+                        }
+                        VStack(alignment: .leading) {
+                            let fa = store.bookmarks[i].fontAdjust
+                            Text("文字大小: \(fa >= 0 ? "+" : "")\(Int(fa))%")
+                            Slider(value: $store.bookmarks[i].fontAdjust, in: -50...100, step: 5)
+                        }
+                        Toggle("桌面版页面 (UA)", isOn: $store.bookmarks[i].desktopUA)
+                    }
+                }
+            }
+            .navigationTitle("快捷设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 
@@ -467,6 +500,8 @@ struct PageBottomBar: View {
     @State private var showAdd = false
     @State private var showSettings = false
     @State private var showImporter = false
+    @State private var importMessage: String?
+    @State private var showImportAlert = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -529,9 +564,16 @@ struct PageBottomBar: View {
             // 导入书签：与主页原入口同一处理（security scoped + importFrom）
             if case .success(let url) = result {
                 let scoped = url.startAccessingSecurityScopedResource()
-                _ = store.importFrom(url)
+                let n = store.importFrom(url)
                 if scoped { url.stopAccessingSecurityScopedResource() }
+                importMessage = n >= 0 ? "成功导入 \(n) 个书签" : "导入失败：文件格式不对"
+                showImportAlert = true
             }
+        }
+        .alert("导入结果", isPresented: $showImportAlert) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(importMessage ?? "")
         }
     }
 

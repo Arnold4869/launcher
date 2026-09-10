@@ -13,6 +13,7 @@ struct SplitViewScreen: View {
     @State private var topFraction: Double = 0.5
     @State private var expanded = false
     @State private var showTaskSwitcher = false
+    @State private var showQuickSettings = false
     @EnvironmentObject var wm: WindowManager
     @EnvironmentObject var store: BookmarkStore
     @AppStorage("splitFraction") private var savedFraction: Double = 0.5
@@ -84,6 +85,9 @@ struct SplitViewScreen: View {
             .onReceive(NotificationCenter.default.publisher(for: .fabActionTasks)) { _ in
                 expanded = false; showTaskSwitcher = true
             }
+            .onReceive(NotificationCenter.default.publisher(for: .fabActionSettings)) { _ in
+                expanded = false; showQuickSettings = true
+            }
             .onReceive(NotificationCenter.default.publisher(for: .fabActionClearCache)) { _ in
                 // 分屏页清缓存 = 上下两半都清
                 expanded = false
@@ -94,6 +98,14 @@ struct SplitViewScreen: View {
         .sheet(isPresented: $showTaskSwitcher) {
             TaskSwitcherView()
                 .environmentObject(wm)
+                .environmentObject(store)
+        }
+        .sheet(isPresented: $showQuickSettings) {
+            // 分屏页快捷设置：调整上半屏书签的页面属性（实时保存）
+            if let topBM = wm.splitTop {
+                SplitQuickSettingsView(bookmarkID: topBM.id)
+                    .environmentObject(store)
+            }
         }
         .onAppear {
             // 每次进入分屏都初始化为标准 55/45 分割（上次关一半残留的 0/1 不再带进来）
@@ -136,6 +148,7 @@ struct SplitWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, UIGestureRecognizerDelegate {
         var onWebViewTap: (() -> Void)? = nil
         var clearRefreshObserver: NSObjectProtocol? = nil
+        var lastFontAdjust: Double? = nil
         @objc func webViewTapped() { onWebViewTap?() }
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
@@ -227,79 +240,22 @@ struct SplitWebView: UIViewRepresentable {
         }
         return fresh
     }
-    func updateUIView(_ wv: WKWebView, context: Context) {}
+    func updateUIView(_ wv: WKWebView, context: Context) {
+        wv.currentBookmark = bm
+        if wv.pageZoom != bm.scale { wv.pageZoom = bm.scale }
+        let wantUA = bm.desktopUA ? PageWebView.desktopUserAgent : nil
+        if wv.customUserAgent != wantUA { wv.customUserAgent = wantUA }
+        if bm.fontAdjust != 0, context.coordinator.lastFontAdjust != bm.fontAdjust {
+            context.coordinator.lastFontAdjust = bm.fontAdjust
+            let js = "document.documentElement.style.webkitTextSizeAdjust='\(100 + Int(bm.fontAdjust))%';"
+            wv.evaluateJavaScript(js, completionHandler: nil)
+        }
+    }
     func makeCoordinator() -> Coordinator { Coordinator(bm) }
 }
 
 
-/// 分屏流程：先选下半屏书签（后台已打开的页面排前面，浏览状态保留），选中后切分屏
-struct SplitFlowView: View {
-    let top: Bookmark
-    /// top 书签若已是打开页，复用其 WebView
-    var topPage: PageState? = nil
-    @ObservedObject var store: BookmarkStore
-    @EnvironmentObject var wm: WindowManager
-    @State private var bottom: Bookmark?
-    @State private var bottomPage: PageState?
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        if let bottom {
-            SplitViewScreen(top: top, bottom: bottom, topPage: topPage, bottomPage: bottomPage)
-        } else {
-            NavigationStack {
-                ScrollView {
-                    let openPages = wm.pages.filter { $0.bookmark.id != top.id }
-                    if !openPages.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("已打开的页面")
-                                .font(.footnote.bold())
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
-                                ForEach(openPages) { page in
-                                    Button {
-                                        bottom = page.bookmark
-                                        bottomPage = page
-                                    } label: {
-                                        BookmarkCard(bm: page.bookmark)
-                                            .overlay(alignment: .topTrailing) {
-                                                Image(systemName: "checkmark.circle.fill")
-                                                    .foregroundStyle(.blue)
-                                                    .padding(6)
-                                            }
-                                    }
-                                }
-                            }
-                            Divider().padding(.vertical, 8)
-                        }
-                        .padding(.horizontal)
-                        .padding(.top)
-                    }
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
-                        ForEach(store.bookmarks.filter { $0.id != top.id }) { bm in
-                            Button {
-                                bottom = bm
-                            } label: {
-                                BookmarkCard(bm: bm)
-                            }
-                        }
-                    }
-                    .padding()
-                }
-                .navigationTitle("选下半屏书签")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("取消") { dismiss() }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// 分屏选择器（从全屏页悬浮钮进入）：选下半屏书签 → 关全屏 → 弹分屏
+/// 分屏选择器（主页长按 / 全屏页悬浮钮共用）：选下半屏书签 → 进入分屏
 struct SplitPickerView: View {
     let top: Bookmark
     /// 发起分屏的页面（若它本身是已打开页，进分屏时复用其 WebView）
@@ -309,10 +265,6 @@ struct SplitPickerView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        pickerContent
-    }
-
-    private var pickerContent: some View {
         NavigationStack {
             ScrollView {
                 // 已打开的后台页面：直接选为下半屏（复用常驻 WebView，浏览状态保留）
@@ -325,20 +277,8 @@ struct SplitPickerView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
                             ForEach(openPages) { page in
-                                Button {
-                                    wm.goHome()
-                                    wm.splitTop = top
-                                    wm.splitTopPage = topPage
-                                    wm.splitBottom = page.bookmark
-                                    wm.splitBottomPage = page
-                                    dismiss()
-                                } label: {
+                                Button { pick(page.bookmark, page: page) } label: {
                                     BookmarkCard(bm: page.bookmark)
-                                        .overlay(alignment: .topTrailing) {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundStyle(.blue)
-                                                .padding(6)
-                                        }
                                 }
                             }
                         }
@@ -349,14 +289,7 @@ struct SplitPickerView: View {
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
                     ForEach(store.bookmarks.filter { $0.id != top.id }) { bm in
-                        Button {
-                            wm.goHome()
-                            wm.splitTop = top
-                            wm.splitTopPage = topPage
-                            wm.splitBottom = bm
-                            wm.splitBottomPage = nil
-                            dismiss()
-                        } label: {
+                        Button { pick(bm, page: nil) } label: {
                             BookmarkCard(bm: bm)
                         }
                     }
@@ -372,11 +305,11 @@ struct SplitPickerView: View {
             }
         }
     }
-}
 
-struct SplitPair: Identifiable {
-    let id = UUID()
-    let top: Bookmark
-    var topPage: PageState? = nil
-    var bottom: Bookmark? = nil
+    private func pick(_ bottom: Bookmark, page: PageState?) {
+        wm.goHome()
+        wm.setPageForSplit(top, top: true, page: topPage)
+        wm.setPageForSplit(bottom, top: false, page: page)
+        dismiss()
+    }
 }

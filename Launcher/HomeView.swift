@@ -9,12 +9,9 @@ struct HomeView: View {
     @AppStorage("cardFontScale") private var fontScale: Double = 1.0
     @State private var editing: Bookmark?
     @State private var showAdd = false
-    @State private var showImporter = false
-    @State private var importMessage: String?
-    @State private var showImportAlert = false
-    @State private var showSettings = false
-    @State private var showTaskSwitcher = false
-    @State private var splitPair: SplitPair?
+    @State private var showSplitPicker = false
+    @State private var splitTop: Bookmark?
+    @State private var splitTopPage: PageState?
 
     var body: some View {
         NavigationStack {
@@ -46,7 +43,9 @@ struct HomeView: View {
                                         Label("编辑", systemImage: "pencil")
                                     }
                                     Button {
-                                        splitPair = SplitPair(top: bm, topPage: wm.pages.first { $0.bookmark.id == bm.id })
+                                        splitTop = bm
+                                        splitTopPage = wm.pages.first { $0.bookmark.id == bm.id }
+                                        showSplitPicker = true
                                     } label: {
                                         Label("分屏打开", systemImage: "rectangle.split.2x1")
                                     }
@@ -79,30 +78,12 @@ struct HomeView: View {
             .sheet(item: $editing) { bm in
                 BookmarkEditView(store: store, bookmark: bm)
             }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
-            .sheet(isPresented: $showTaskSwitcher) {
-                TaskSwitcherView()
-                    .environmentObject(store)
-                    .environmentObject(wm)
-            }
-            .fullScreenCover(item: $splitPair) { pair in
-                SplitFlowView(top: pair.top, topPage: pair.topPage, store: store)
-            }
-            .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
-                if case .success(let url) = result {
-                    let scoped = url.startAccessingSecurityScopedResource()
-                    let n = store.importFrom(url)
-                    if scoped { url.stopAccessingSecurityScopedResource() }
-                    importMessage = n >= 0 ? "成功导入 \(n) 个书签" : "导入失败：文件格式不对"
-                    showImportAlert = true
+            .sheet(isPresented: $showSplitPicker) {
+                if let top = splitTop {
+                    SplitPickerView(top: top, topPage: splitTopPage)
+                        .environmentObject(store)
+                        .environmentObject(wm)
                 }
-            }
-            .alert("导入结果", isPresented: $showImportAlert) {
-                Button("好", role: .cancel) {}
-            } message: {
-                Text(importMessage ?? "")
             }
         }
     }
@@ -186,7 +167,7 @@ struct AddBookmarkCard: View {
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var cols = GridSettings.columns
+    @AppStorage("gridColumns") private var cols = 2
     @AppStorage("cardHeight") private var cardHeight: Double = 100
     @AppStorage("cardFontScale") private var fontScale: Double = 1.0
     // 悬浮按钮开关（彻底隐藏后可在此恢复）
@@ -195,106 +176,49 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // 一级菜单：分类入口，收进二级页面
                 Section {
-                    NavigationLink {
-                        BookmarkGridSettingsView(cols: $cols, cardHeight: $cardHeight, fontScale: $fontScale)
-                    } label: {
-                        Label("主屏布局", systemImage: "square.grid.2x2")
+                    Stepper("每行显示 \(cols) 个", value: $cols, in: 1...5)
+                } header: {
+                    Text("列数")
+                }
+                Section {
+                    VStack(alignment: .leading) {
+                        Text("卡片高度: \(Int(cardHeight))")
+                        Slider(value: $cardHeight, in: 60...200, step: 5)
                     }
-                    NavigationLink {
-                        FabSettingsView(fabHidden: $fabHidden)
-                    } label: {
-                        Label("悬浮按钮", systemImage: "record.circle")
+                    VStack(alignment: .leading) {
+                        Text("卡片字体大小: \(Int(fontScale * 100))%")
+                        Slider(value: $fontScale, in: 0.5...2.0, step: 0.05)
                     }
-                    NavigationLink {
-                        AboutView()
-                    } label: {
-                        Label("关于", systemImage: "info.circle")
-                    }
+                } header: {
+                    Text("卡片")
+                } footer: {
+                    Text("书签卡片的高度与字体大小，实时生效")
+                }
+                Section {
+                    Toggle("显示悬浮按钮", isOn: Binding(
+                        get: { !fabHidden },
+                        set: { fabHidden = !$0 }
+                    ))
+                } header: {
+                    Text("悬浮按钮")
+                } footer: {
+                    Text("关闭后彻底隐藏；打开网页页时可从悬浮按钮菜单里选「隐藏」，在这里恢复")
+                }
+                Section {
+                    LabeledContent("版本", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-")
+                    LabeledContent("构建号", value: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "-")
+                } header: {
+                    Text("关于")
                 }
             }
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") {
-                        GridSettings.columns = cols
-                        dismiss()
-                    }
+                    Button("完成") { dismiss() }
                 }
             }
         }
-    }
-}
-
-/// 二级：主屏布局设置
-struct BookmarkGridSettingsView: View {
-    @Binding var cols: Int
-    @Binding var cardHeight: Double
-    @Binding var fontScale: Double
-
-    var body: some View {
-        Form {
-            Section {
-                Stepper("每行显示 \(cols) 个", value: $cols, in: 1...5)
-            } header: {
-                Text("列数")
-            }
-            Section {
-                VStack(alignment: .leading) {
-                    Text("卡片高度: \(Int(cardHeight))")
-                    Slider(value: $cardHeight, in: 60...200, step: 5)
-                }
-                VStack(alignment: .leading) {
-                    Text("卡片字体大小: \(Int(fontScale * 100))%")
-                    Slider(value: $fontScale, in: 0.5...2.0, step: 0.05)
-                }
-            } header: {
-                Text("卡片")
-            } footer: {
-                Text("书签卡片的高度与字体大小，实时生效")
-            }
-        }
-        .navigationTitle("主屏布局")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-/// 二级：悬浮按钮设置
-struct FabSettingsView: View {
-    @Binding var fabHidden: Bool
-
-    var body: some View {
-        Form {
-            Section {
-                Toggle("显示悬浮按钮", isOn: Binding(
-                    get: { !fabHidden },
-                    set: { fabHidden = !$0 }
-                ))
-            } header: {
-                Text("悬浮按钮")
-            } footer: {
-                Text("关闭后彻底隐藏；打开网页页时可从悬浮按钮菜单里选「隐藏」，在这里恢复")
-            }
-        }
-        .navigationTitle("悬浮按钮")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-/// 二级：关于
-struct AboutView: View {
-    var body: some View {
-        Form {
-            Section {
-                LabeledContent("版本", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-")
-                LabeledContent("构建号", value: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "-")
-            } header: {
-                Text("Launcher")
-            }
-        }
-        .navigationTitle("关于")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }

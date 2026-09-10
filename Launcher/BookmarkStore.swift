@@ -59,11 +59,6 @@ enum CardPalette {
     }
 }
 
-/// 每行列数（全局设置，持久化到 UserDefaults）
-enum GridSettings {
-    @AppStorage("gridColumns") static var columns: Int = 2
-}
-
 struct Bookmark: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
     var name: String = ""
