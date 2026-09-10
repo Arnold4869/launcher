@@ -702,10 +702,11 @@ struct PageBottomBar: View {
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity)
             }
+            .tint(.primary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .launcherGlass(.clear, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
         .sheet(isPresented: $showTaskSwitcher) {
@@ -752,5 +753,6 @@ struct PageBottomBar: View {
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity)
         }
+        .buttonStyle(.plain)
     }
 }
