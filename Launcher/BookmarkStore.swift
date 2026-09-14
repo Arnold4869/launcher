@@ -67,7 +67,8 @@ struct Bookmark: Identifiable, Codable, Hashable {
     var colorIndex: Int = CardPalette.randomIndex()
     var scale: Double = 1.0        // 页面缩放 0.5 - 3.0
     var fontAdjust: Double = 0     // 文字大小偏移百分比 -50 ~ +100
-    var desktopUA: Bool = false    // 桌面 UA
+    var desktopUA: Bool = false    // 桌面 UA（legacy，兼容旧 json；uaMode=2 时同步置 true）
+    var uaMode: Int = 0            // 访问标识 0=iOS默认 1=Android 2=PC桌面
     var basicAuthUser: String = "" // HTTP Basic Auth 用户名（空 = 不启用）
     var basicAuthPass: String = "" // HTTP Basic Auth 密码
     var loginUser: String = ""     // 网页登录表单自动填充用户名（空 = 不启用）
@@ -86,6 +87,7 @@ struct Bookmark: Identifiable, Codable, Hashable {
          colorIndex: Int = CardPalette.randomIndex(), scale: Double = 1.0, fontAdjust: Double = 0,
          desktopUA: Bool = false, basicAuthUser: String = "", basicAuthPass: String = "",
          loginUser: String = "", loginPass: String = "", autoSubmit: Bool = true,
+         uaMode: Int = 0,
          colorMode: Int = 0, autoColorHex: String = "", customColorHex: String = "",
          timeLimitEnabled: Bool = false, dailyLimitMinutes: Int = 30, unlockMode: Int = 0,
          unlockBonusMinutes: Int = 15) {
@@ -97,6 +99,7 @@ struct Bookmark: Identifiable, Codable, Hashable {
         self.scale = scale
         self.fontAdjust = fontAdjust
         self.desktopUA = desktopUA
+        self.uaMode = uaMode
         self.basicAuthUser = basicAuthUser
         self.basicAuthPass = basicAuthPass
         self.loginUser = loginUser
@@ -112,7 +115,7 @@ struct Bookmark: Identifiable, Codable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, urlString, icon, colorIndex, scale, fontAdjust, desktopUA
+        case id, name, urlString, icon, colorIndex, scale, fontAdjust, desktopUA, uaMode
         case basicAuthUser, basicAuthPass, loginUser, loginPass, autoSubmit
         case colorMode, autoColorHex, customColorHex
         case timeLimitEnabled, dailyLimitMinutes, unlockMode, unlockBonusMinutes
@@ -129,6 +132,7 @@ struct Bookmark: Identifiable, Codable, Hashable {
         try c.encode(scale, forKey: .scale)
         try c.encode(fontAdjust, forKey: .fontAdjust)
         try c.encode(desktopUA, forKey: .desktopUA)
+        try c.encode(uaMode, forKey: .uaMode)
         try c.encode(basicAuthUser, forKey: .basicAuthUser)
         try c.encode(basicAuthPass, forKey: .basicAuthPass)
         try c.encode(loginUser, forKey: .loginUser)
@@ -153,6 +157,7 @@ struct Bookmark: Identifiable, Codable, Hashable {
         scale = try c.decodeIfPresent(Double.self, forKey: .scale) ?? 1.0
         fontAdjust = try c.decodeIfPresent(Double.self, forKey: .fontAdjust) ?? 0
         desktopUA = try c.decodeIfPresent(Bool.self, forKey: .desktopUA) ?? false
+        uaMode = try c.decodeIfPresent(Int.self, forKey: .uaMode) ?? 0
         basicAuthUser = try c.decodeIfPresent(String.self, forKey: .basicAuthUser) ?? ""
         basicAuthPass = try c.decodeIfPresent(String.self, forKey: .basicAuthPass) ?? ""
         loginUser = try c.decodeIfPresent(String.self, forKey: .loginUser) ?? ""
@@ -167,6 +172,8 @@ struct Bookmark: Identifiable, Codable, Hashable {
         unlockBonusMinutes = try c.decodeIfPresent(Int.self, forKey: .unlockBonusMinutes) ?? 15
         // 兼容 1.6.0：旧字段 autoColor=true 视作图标取色
         if try c.decodeIfPresent(Bool.self, forKey: .autoColor) ?? false { colorMode = 1 }
+        // 兼容旧版本：老书签只有 desktopUA=true → 映射成 uaMode=2（PC）
+        if uaMode == 0 && desktopUA { uaMode = 2 }
     }
 }
 

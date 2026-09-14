@@ -1,43 +1,122 @@
 import UIKit
 import WebKit
 
-// MARK: - 页面分享（底栏「更多」→「分享页面」）
+// MARK: - 页面分享 v2（2.5.0）
 //
-// 为什么不用长按：2.3.0 走 WKUIDelegate.contextMenuConfigurationForElement 对纯图片根本不触发
-// （WebKit WKContentViewInteraction.mm: 只有 isLink 才进这个回调）；2.3.1 改注入 JS 检测长按，
-// 但【直接打开图片地址】时 WebKit 用的是内置图片文档，用户脚本不执行 → 纯图片场景仍然无效。
-// 结论：长按这条路对纯图片不可靠，全部回退到系统默认行为，分享能力收进导航栏「更多」里，
-// 由原生代码自己判断当前页是图片还是网页，自适应分享。
+// 三种分享物，按当前页自适应：
+//   • 当前页本身就是一张图（URL 后缀 / contentType / 整页一张图）→「分享图片」直接下载图本体分享
+//   • 普通网页 →「分享页面截图」= 可见区域全分辨率 PNG（takeSnapshot，不降采样）
+//              「分享页面 PDF」= WKWebView.createPDF 整页（官方 API，含全部已渲染内容）
+//   • 任何情况都可「分享网址」
+// 头文件名带书签名，微信/邮件里能看出是什么页面。
 
 enum PageShare {
     private static let imageExts: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "avif", "tiff", "svg"]
 
-    /// 入口：优先用调用方给的页面 WebView，没给就在视图层级里找当前可见的那个（分屏上半屏等场景）
-    static func shareCurrentPage(_ webView: WKWebView?) {
-        guard let wv = webView ?? visibleWebView() else {
-            showToast("没有可分享的页面")
+    /// 当前页是否为纯图片页（决定「分享页面」菜单项显示成「分享图片」）
+    static func isImagePage(_ wv: WKWebView, done: @escaping (Bool) -> Void) {
+        guard let url = wv.url else { done(false); return }
+        if imageExts.contains(url.pathExtension.lowercased()) { done(true); return }
+        wv.evaluateJavaScript(imageProbeJS) { res, _ in
+            done((res as? String)?.isEmpty == false)
+        }
+    }
+
+    /// 菜单项调用：图片页 → 分享图片本体；普通页 → 分享可见区域 PNG 截图
+    static func shareDefault(_ wv: WKWebView) {
+        isImagePage(wv) { isImg in
+            if isImg {
+                guard let url = wv.url else { shareVisibleSnapshot(wv); return }
+                shareImage(url: url, userAgent: wv.customUserAgent, name: wv.currentBookmark.name)
+            } else {
+                shareVisibleSnapshot(wv)
+            }
+        }
+    }
+
+    // MARK: PNG 截图（可见区域，全分辨率）
+    static func shareVisibleSnapshot(_ wv: WKWebView) {
+        showWaiting("正在生成截图…")
+        wv.takeSnapshot(with: nil) { image, _ in
+            guard let img = image else {
+                hideWaiting(); showToast("截图失败"); return
+            }
+            guard let png = img.pngData() else {
+                hideWaiting(); showToast("PNG 编码失败"); return
+            }
+            let name = sanitizedFileName(wv.currentBookmark.name.isEmpty ? "页面截图" : wv.currentBookmark.name)
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(name)-截图.png")
+            do {
+                try png.write(to: url, options: .atomic)
+            } catch {
+                hideWaiting(); showToast("截图保存失败"); return
+            }
+            hideWaiting()
+            shareItems([url])
+        }
+    }
+
+    // MARK: 整页 PDF（官方 createPDF，含整个已渲染内容）
+    static func shareFullPDF(_ wv: WKWebView) {
+        showWaiting("正在生成 PDF…")
+        let cfg = WKPDFConfiguration()
+        // rect 留 zero = 整页（文档行为）
+        cfg.rect = .zero
+        wv.createPDF(configuration: cfg) { result in
+            switch result {
+            case .success(let data):
+                let name = sanitizedFileName(wv.currentBookmark.name.isEmpty ? "页面" : wv.currentBookmark.name)
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("\(name).pdf")
+                do {
+                    try data.write(to: url, options: .atomic)
+                } catch {
+                    hideWaiting(); showToast("PDF 保存失败"); return
+                }
+                hideWaiting()
+                shareItems([url])
+            case .failure:
+                hideWaiting()
+                showToast("PDF 生成失败")
+            }
+        }
+    }
+
+    /// 分享当前页的图片本体（图片页专用；拿不到 URL 时退化为截图分享，不崩）
+    static func shareCurrentImage(_ wv: WKWebView) {
+        guard let url = wv.url ?? URL(string: wv.currentBookmark.urlString) else {
+            shareVisibleSnapshot(wv)
             return
         }
+        shareImage(url: url, userAgent: wv.customUserAgent, name: wv.currentBookmark.name)
+    }
+
+    // MARK: 分享网址
+    static func shareURL(_ wv: WKWebView) {
         guard let url = wv.url ?? URL(string: wv.currentBookmark.urlString) else {
             showToast("拿不到当前页面地址")
             return
         }
-        // ① 地址后缀就是图片 → 直接按图片分享
-        if imageExts.contains(url.pathExtension.lowercased()) {
-            shareImage(url: url, userAgent: wv.customUserAgent)
+        shareItems([url.absoluteString])
+    }
+
+    // MARK: 复制网址
+    static func copyURL(_ wv: WKWebView) {
+        guard let url = wv.url ?? URL(string: wv.currentBookmark.urlString) else {
+            showToast("拿不到当前页面地址")
             return
         }
-        // ② 后缀看不出来（无扩展名/带参数的图床）：问页面本身
-        //    document.contentType 形如 image/jpeg；整页一张图的页面 WebKit 会把图包成 body 首个子元素
-        wv.evaluateJavaScript(Self.imageProbeJS) { res, _ in
-            if let s = res as? String, !s.isEmpty, let imgURL = URL(string: s) {
-                shareImage(url: imgURL, userAgent: wv.customUserAgent)
-            } else {
-                // ③ 普通网页 → 分享网址
-                shareItems([url.absoluteString])
-            }
-        }
+        UIPasteboard.general.string = url.absoluteString
+        showToast("已复制网址")
     }
+
+    /// 当前显示的网址（面板地址栏用）
+    static func displayURL(_ wv: WKWebView) -> String {
+        wv.url?.absoluteString ?? wv.currentBookmark.urlString
+    }
+
+    // MARK: 内部
 
     private static let imageProbeJS = """
     (function(){
@@ -53,10 +132,10 @@ enum PageShare {
     })();
     """
 
-    /// 视图层级里当前可见的 WKWebView：分屏上半屏优先（屏幕坐标 y 最小且尺寸正常）
-    private static func visibleWebView() -> WKWebView? {
+    /// 视图层级里当前可见的 WKWebView（分屏等场景无法直接拿到实例时分屏上半屏优先）
+    static func visibleWebView() -> WKWebView? {
         guard let window = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
+            .compactMap { $0 as? UIWindowScene }
             .flatMap({ $0.windows })
             .first(where: { $0.isKeyWindow }) else { return nil }
         var found: [(y: CGFloat, wv: WKWebView)] = []
@@ -74,7 +153,19 @@ enum PageShare {
         return found.sorted { $0.y < $1.y }.first?.wv
     }
 
-    // MARK: 下载（带上 WebView 的 cookie 和 UA，保证需要登录的图也能下）
+    /// 下载图片本体分享（带 WebView cookie + UA，登录站点也能下）；失败退化为分享图片链接
+    static func shareImage(url: URL, userAgent: String?, name: String = "") {
+        showWaiting("正在获取图片…")
+        downloadImage(url: url, userAgent: userAgent) { img in
+            hideWaiting()
+            if let img {
+                shareItems([img])
+            } else {
+                shareItems([url.absoluteString])
+            }
+        }
+    }
+
     static func downloadImage(url: URL, userAgent: String?, done: @escaping (UIImage?) -> Void) {
         WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
             for c in cookies { HTTPCookieStorage.shared.setCookie(c) }
@@ -87,11 +178,27 @@ enum PageShare {
         }
     }
 
-    /// 分享图片本体（下载失败退化为分享图片链接），不经过相册权限
-    static func shareImage(url: URL, userAgent: String?) {
-        downloadImage(url: url, userAgent: userAgent) { img in
-            shareItems(img.map { [$0] } ?? [url.absoluteString])
-        }
+    private static func sanitizedFileName(_ s: String) -> String {
+        let bad = CharacterSet(charactersIn: "/\\?%*|\"<>:")
+        let clean = s.components(separatedBy: bad).joined(separator: " ")
+        return String(clean.prefix(40)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: 等待浮层（生成 PNG/PDF 可能要一两秒，给个反馈）
+
+    private static var waitingAlert: UIAlertController?
+
+    private static func showWaiting(_ msg: String) {
+        hideWaiting()
+        guard let top = topViewController() else { return }
+        let a = UIAlertController(title: nil, message: msg, preferredStyle: .alert)
+        waitingAlert = a
+        top.present(a, animated: true)
+    }
+
+    private static func hideWaiting() {
+        waitingAlert?.dismiss(animated: false)
+        waitingAlert = nil
     }
 
     static func shareItems(_ items: [Any]) {

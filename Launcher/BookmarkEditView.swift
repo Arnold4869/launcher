@@ -11,7 +11,7 @@ struct BookmarkEditView: View {
     @State private var colorIndex: Int = CardPalette.randomIndex()
     @State private var scale: Double = 1.0
     @State private var fontAdjust: Double = 0
-    @State private var desktopUA: Bool = false
+    @State private var uaMode: Int = 0
     @State private var authUser: String = ""
     @State private var authPass: String = ""
     @State private var loginUser: String = ""
@@ -100,7 +100,12 @@ struct BookmarkEditView: View {
                         Text("文字大小: \(fontAdjust >= 0 ? "+" : "")\(Int(fontAdjust))%")
                         Slider(value: $fontAdjust, in: -50...100, step: 5)
                     }
-                    Toggle("桌面版页面 (UA)", isOn: $desktopUA)
+                    Picker("访问标识", selection: $uaMode) {
+                        ForEach(0..<UserAgentOption.titles.count, id: \.self) { m in
+                            Text(UserAgentOption.titles[m]).tag(m)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
 
                 Section {
@@ -243,7 +248,7 @@ struct BookmarkEditView: View {
         colorIndex = bm.colorIndex
         scale = bm.scale
         fontAdjust = bm.fontAdjust
-        desktopUA = bm.desktopUA
+        uaMode = bm.uaMode
         authUser = bm.basicAuthUser
         authPass = bm.basicAuthPass
         loginUser = bm.loginUser
@@ -298,12 +303,13 @@ struct BookmarkEditView: View {
             colorIndex: colorIndex,
             scale: scale,
             fontAdjust: fontAdjust,
-            desktopUA: desktopUA,
+            desktopUA: uaMode == 2,
             basicAuthUser: authUser,
             basicAuthPass: authPass,
             loginUser: loginUser,
             loginPass: loginPass,
             autoSubmit: autoSubmit,
+            uaMode: uaMode,
             colorMode: colorMode,
             autoColorHex: autoColorHex,
             customColorHex: customColorHex,

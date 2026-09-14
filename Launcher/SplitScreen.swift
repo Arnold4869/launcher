@@ -14,6 +14,10 @@ struct SplitViewScreen: View {
     @State private var expanded = false
     @State private var showTaskSwitcher = false
     @State private var showQuickSettings = false
+    @State private var showToolsPanel = false
+    @State private var showFind = false
+    /// 工具面板/查找条作用的那半屏（分屏里取可见的上半屏实例）
+    @State private var activeWV: WKWebView? = nil
     @EnvironmentObject var wm: WindowManager
     @EnvironmentObject var store: BookmarkStore
     @AppStorage("splitFraction") private var savedFraction: Double = 0.5
@@ -22,7 +26,7 @@ struct SplitViewScreen: View {
             VStack(spacing: 0) {
                 if topFraction > 0.02 {
                     // 上半屏（拖到最底时关闭）
-                    halfView(for: top, page: topPage)
+                    halfView(for: liveTop, page: topPage)
                         .frame(height: geo.size.height * max(topFraction, 0))
                 }
 
@@ -58,7 +62,7 @@ struct SplitViewScreen: View {
 
                 if topFraction < 0.98 {
                     // 下半屏（拖到最顶时关闭）
-                    halfView(for: bottom, page: bottomPage)
+                    halfView(for: liveBottom, page: bottomPage)
                 }
             }
         }
@@ -67,9 +71,31 @@ struct SplitViewScreen: View {
         .toolbar(.hidden, for: .navigationBar)
                 .overlay(alignment: .bottom) {
             // 底部浮动导航栏（悬浮在分屏之上，不改布局）
-            PageBottomBarLayer(mode: .page, currentPage: topPage)
+            // 分屏里可能有两个 WebView：工具面板/查找条作用在「可见的上半屏」
+            PageBottomBarLayer(mode: .page, currentPage: topPage, onMore: {
+                activeWV = topPage?.webViewHolder ?? PageShare.visibleWebView()
+                showToolsPanel = true
+            }, onFind: {
+                activeWV = topPage?.webViewHolder ?? PageShare.visibleWebView()
+                showFind = true
+            })
                 .environmentObject(wm)
                 .environmentObject(store)
+        }
+        .overlay(alignment: .bottom) {
+            if showFind, let wv = activeWV {
+                PageFindBar(wv: wv, isPresented: $showFind)
+                    .padding(.bottom, 76)   // 浮在底栏之上，不跟底栏叠一起
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .sheet(isPresented: $showToolsPanel) {
+            if let wv = activeWV {
+                PageToolsPanel(wv: wv,
+                               onFind: { showFind = true },
+                               onZoom: { showQuickSettings = true })
+                    .environmentObject(store)
+            }
         }
         .overlay {
             // 可拖动 + 吸边隐藏悬浮钮（与全屏页共用位置）
@@ -115,6 +141,15 @@ struct SplitViewScreen: View {
     }
 
     private enum Half { case top, bottom }
+
+    /// 实时书签：store 里的最新值（快捷设置/工具面板改了 uaMode/scale 立刻反映到这一半，
+    /// 否则 SplitViewScreen 的 top/bottom 是创建时的值拷贝，改完会被 updateUIView 写回旧值）
+    private var liveTop: Bookmark {
+        store.bookmarks.first(where: { $0.id == top.id }) ?? top
+    }
+    private var liveBottom: Bookmark {
+        store.bookmarks.first(where: { $0.id == bottom.id }) ?? bottom
+    }
 
     /// 半屏内容：有 PageState 复用其常驻 WebView，否则新建
     @ViewBuilder
@@ -200,7 +235,7 @@ struct SplitWebView: UIViewRepresentable {
         }
         // 缩放 / UA：复用分支也要套用——重建出来的实例默认是 1.0 缩放 + 系统 UA
         if fresh.pageZoom != bm.scale { fresh.pageZoom = bm.scale }
-        let wantUA = bm.desktopUA ? PageWebView.desktopUserAgent : nil
+        let wantUA = UserAgentOption.value(for: bm.uaMode)
         if fresh.customUserAgent != wantUA { fresh.customUserAgent = wantUA }
         // 初始加载：覆盖两种情况——
         //   ① 上面 else 新建的实例
@@ -244,8 +279,12 @@ struct SplitWebView: UIViewRepresentable {
     func updateUIView(_ wv: WKWebView, context: Context) {
         wv.currentBookmark = bm
         if wv.pageZoom != bm.scale { wv.pageZoom = bm.scale }
-        let wantUA = bm.desktopUA ? PageWebView.desktopUserAgent : nil
-        if wv.customUserAgent != wantUA { wv.customUserAgent = wantUA }
+        // 访问标识变了 → 重载（否则只在下次导航才生效，看起来像"点了没反应"）
+        let wantUA = UserAgentOption.value(for: bm.uaMode)
+        if wv.customUserAgent != wantUA {
+            wv.customUserAgent = wantUA
+            wv.reload()
+        }
         if bm.fontAdjust != 0, context.coordinator.lastFontAdjust != bm.fontAdjust {
             context.coordinator.lastFontAdjust = bm.fontAdjust
             let js = "document.documentElement.style.webkitTextSizeAdjust='\(100 + Int(bm.fontAdjust))%';"

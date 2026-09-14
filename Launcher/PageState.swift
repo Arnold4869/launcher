@@ -30,6 +30,10 @@ final class PageState: ObservableObject, Identifiable {
     }
     init(_ bm: Bookmark) { self.bookmark = bm }
 
+    /// 已创建的 WebView 实例（nil = 还没创建过）。给「更多」面板/查找条取当前页引用用，
+    /// 不能像 `webView` 那样自动新建实例（面板可能从主页形态被引用，凭空建实例浪费内存）
+    var webViewHolder: WKWebView? { heldWebView }
+
     /// 内存紧张时释放后台页的 WebView（保留页面记录与缩略图，切回来时重新加载）
     /// 目的：避免前台正在阅读的页面被系统回收进程，出现"突然刷新/白屏"
     func releaseWebView() {

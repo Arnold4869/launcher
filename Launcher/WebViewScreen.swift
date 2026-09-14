@@ -35,19 +35,21 @@ struct FullscreenPage: View {
     @State private var expanded = false
     @State private var zoom: Double
     @State private var fontAdjust: Double
-    @State private var desktopUA: Bool
+    @State private var uaMode: Int
+    @State private var showFind = false
+    @State private var showToolsPanel = false
 
     init(page: PageState, wm: WindowManager) {
         self.page = page
         _wm = ObservedObject(wrappedValue: wm)
         _zoom = State(initialValue: page.bookmark.scale)
         _fontAdjust = State(initialValue: page.bookmark.fontAdjust)
-        _desktopUA = State(initialValue: page.bookmark.desktopUA)
+        _uaMode = State(initialValue: page.bookmark.uaMode)
     }
 
     var body: some View {
         ZStack {
-            PageWebView(page: page, zoom: zoom, fontAdjust: fontAdjust, desktopUA: desktopUA,
+            PageWebView(page: page, zoom: zoom, fontAdjust: fontAdjust, uaMode: uaMode,
                         edgeSwipeHome: { wm.goHome() },
                         onWebViewTap: {
                             // 只发通知，不在页面本体改状态（避免 WebView 重绘）
@@ -79,13 +81,33 @@ struct FullscreenPage: View {
         .overlay(alignment: .bottom) {
             // 底部浮动导航栏：悬浮在网页之上（不改布局、不触发重渲染）
             // 单击网页任意处唤出；显示 3 秒后自动隐藏
-            PageBottomBarLayer(mode: .page, currentPage: page)
-                .environmentObject(wm)
-                .environmentObject(store)
+            PageBottomBarLayer(mode: .page, currentPage: page, onMore: {
+                showToolsPanel = true
+            }, onFind: {
+                showFind = true
+            })
+            .environmentObject(wm)
+            .environmentObject(store)
+        }
+        .overlay(alignment: .bottom) {
+            // 查找条：压在底栏之上，从下边安全区升起
+            if showFind, let wv = page.webViewHolder {
+                PageFindBar(wv: wv, isPresented: $showFind)
+                    .padding(.bottom, 76)   // 浮在底栏之上，不跟底栏叠一起
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .sheet(isPresented: $showToolsPanel) {
+            if let wv = page.webViewHolder {
+                PageToolsPanel(wv: wv,
+                               onFind: { showFind = true },
+                               onZoom: { showQuickSettings = true })
+                    .environmentObject(store)
+            }
         }
         .sheet(isPresented: $showQuickSettings) {
             QuickSettingsView(bookmarkID: page.bookmark.id,
-                              zoom: $zoom, fontAdjust: $fontAdjust, desktopUA: $desktopUA)
+                              zoom: $zoom, fontAdjust: $fontAdjust, uaMode: $uaMode)
                 .environmentObject(store)
         }
         .sheet(isPresented: $showSplitPicker) {
@@ -98,6 +120,12 @@ struct FullscreenPage: View {
                 .environmentObject(store)
                 .environmentObject(wm)
         }
+        // 工具面板/快捷设置里改了访问标识 → 同步到本页 @State（否则 QuickSettings 的绑定是旧值）
+        .onReceive(store.$bookmarks) { list in
+            if let m = list.first(where: { $0.id == page.bookmark.id })?.uaMode, m != uaMode {
+                uaMode = m
+            }
+        }
     }
 }
 
@@ -106,7 +134,7 @@ struct QuickSettingsView: View {
     let bookmarkID: UUID
     @Binding var zoom: Double
     @Binding var fontAdjust: Double
-    @Binding var desktopUA: Bool
+    @Binding var uaMode: Int
     @EnvironmentObject var store: BookmarkStore
     @Environment(\.dismiss) private var dismiss
 
@@ -122,7 +150,12 @@ struct QuickSettingsView: View {
                         Text("文字大小: \(fontAdjust >= 0 ? "+" : "")\(Int(fontAdjust))%")
                         Slider(value: $fontAdjust, in: -50...100, step: 5)
                     }
-                    Toggle("桌面版页面 (UA)", isOn: $desktopUA)
+                    Picker("访问标识", selection: $uaMode) {
+                        ForEach(0..<UserAgentOption.titles.count, id: \.self) { m in
+                            Text(UserAgentOption.titles[m]).tag(m)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
             }
             .navigationTitle("快捷设置")
@@ -141,7 +174,8 @@ struct QuickSettingsView: View {
         if let idx = store.bookmarks.firstIndex(where: { $0.id == bookmarkID }) {
             store.bookmarks[idx].scale = zoom
             store.bookmarks[idx].fontAdjust = fontAdjust
-            store.bookmarks[idx].desktopUA = desktopUA
+            store.bookmarks[idx].uaMode = uaMode
+            store.bookmarks[idx].desktopUA = (uaMode == 2)   // legacy 同步
         }
     }
 
@@ -173,7 +207,12 @@ struct SplitQuickSettingsView: View {
                             Text("文字大小: \(fa >= 0 ? "+" : "")\(Int(fa))%")
                             Slider(value: $store.bookmarks[i].fontAdjust, in: -50...100, step: 5)
                         }
-                        Toggle("桌面版页面 (UA)", isOn: $store.bookmarks[i].desktopUA)
+                        Picker("访问标识", selection: $store.bookmarks[i].uaMode) {
+                            ForEach(0..<UserAgentOption.titles.count, id: \.self) { m in
+                                Text(UserAgentOption.titles[m]).tag(m)
+                            }
+                        }
+                        .pickerStyle(.segmented)
                     }
                 }
             }
@@ -195,7 +234,7 @@ struct PageWebView: UIViewRepresentable {
     let page: PageState
     var zoom: Double = 1.0
     var fontAdjust: Double = 0
-    var desktopUA: Bool = false
+    var uaMode: Int = 0
     var edgeSwipeHome: (() -> Void)? = nil
     /// 单击网页空白处回调（底部导航栏唤出用；不吞触摸）
     var onWebViewTap: (() -> Void)? = nil
@@ -276,9 +315,8 @@ struct PageWebView: UIViewRepresentable {
             }
         }
 
-        if desktopUA {
-            webView.customUserAgent = PageWebView.desktopUserAgent
-        }
+        // 访问标识：首次创建直接设值不 reload（下面马上要 load 初始 URL）
+        webView.customUserAgent = UserAgentOption.value(for: uaMode)
 
         // 清掉旧手势再重挂：SwiftUI 重挂（锁屏回来等）会新建 Coordinator，
         // 旧手势的 target 弱引用旧 Coordinator 已释放 → 点屏无反应；且 name 判断会让它跳过重挂。
@@ -324,7 +362,7 @@ struct PageWebView: UIViewRepresentable {
             webView.pageZoom = zoom
         }
 
-        let wantUA = desktopUA ? PageWebView.desktopUserAgent : nil
+        let wantUA = UserAgentOption.value(for: uaMode)
         if webView.customUserAgent != wantUA {
             webView.customUserAgent = wantUA
             webView.reload()
@@ -344,7 +382,7 @@ struct PageWebView: UIViewRepresentable {
         return c
     }
 
-    static let desktopUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
+    static let desktopUserAgent = UserAgentOption.desktopUA
 }
 
 extension WKWebView {
@@ -456,6 +494,9 @@ extension WKWebView {
 struct PageBottomBarLayer: View {
     var mode: PageBottomBar.BarMode = .page
     var currentPage: PageState? = nil
+    /// 「更多」/「查找页面」动作回调：宿主（FullscreenPage）开工具面板/查找条
+    var onMore: (() -> Void)? = nil
+    var onFind: (() -> Void)? = nil
 
     @State private var visible = true
     @State private var hideTask: DispatchWorkItem? = nil
@@ -464,7 +505,7 @@ struct PageBottomBarLayer: View {
         ZStack(alignment: .bottom) {
             // 常驻挂载：隐藏 = 移出屏幕 + 透明 + 不响应点击，视图不销毁
             // 这样挂在本视图上的 sheet（多任务/分屏/设置等）不会被「自动隐藏」连带关掉
-            PageBottomBar(mode: mode, currentPage: currentPage)
+            PageBottomBar(mode: mode, currentPage: currentPage, onMore: onMore, onFind: onFind)
                 .offset(y: visible ? 0 : 140)
                 .opacity(visible ? 1 : 0)
                 .allowsHitTesting(visible)
@@ -492,6 +533,10 @@ struct PageBottomBar: View {
     var mode: BarMode = .page
     /// 发起分屏时需要的当前页（page 模式下用）
     var currentPage: PageState? = nil
+    /// 「更多」点击回调（page 模式：弹页面工具面板）；nil = 老行为（弹 Menu）
+    var onMore: (() -> Void)? = nil
+    /// 「查找页面」回调（面板里点「查找页面」时用）
+    var onFind: (() -> Void)? = nil
 
     @EnvironmentObject var wm: WindowManager
     @EnvironmentObject var store: BookmarkStore
@@ -513,30 +558,29 @@ struct PageBottomBar: View {
                 barButton("square.on.square", "多任务") { showTaskSwitcher = true }
                 barButton("plus", "新增") { showAdd = true }
             }
-            // 二级菜单：分享页面 / 导入 / 导出 / 设置（分享只在网页形态出现：主页没有"当前页"，
-            // 分屏页 currentPage 为空时由 PageShare 自己在视图层级里找可见的那个 WebView）
-            Menu {
-                if mode == .page {
-                    Button { PageShare.shareCurrentPage(currentPage?.webView) } label: {
-                        Label("分享页面", systemImage: "square.and.arrow.up")
+            if mode == .page, let more = onMore {
+                // page 形态：「更多」= 页面工具面板（地址/查找/缩放/标识/分享/书签，主流浏览器式）
+                barButton("ellipsis.circle", "更多") { more() }
+            } else {
+                // 主页形态：老 Menu（导入/导出/设置）
+                Menu {
+                    Button { showImporter = true } label: { Label("导入书签", systemImage: "square.and.arrow.down") }
+                    ShareLink(item: store.exportURL(), preview: SharePreview("launcher-bookmarks.json")) {
+                        Label("导出书签", systemImage: "arrow.up.doc")
                     }
+                    Button { showSettings = true } label: { Label("设置", systemImage: "gearshape") }
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 19))
+                        Text("更多")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity)
                 }
-                Button { showImporter = true } label: { Label("导入书签", systemImage: "square.and.arrow.down") }
-                ShareLink(item: store.exportURL(), preview: SharePreview("launcher-bookmarks.json")) {
-                    Label("导出书签", systemImage: "arrow.up.doc")
-                }
-                Button { showSettings = true } label: { Label("设置", systemImage: "gearshape") }
-            } label: {
-                VStack(spacing: 3) {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 19))
-                    Text("更多")
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity)
+                .tint(.primary)
             }
-            .tint(.primary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
