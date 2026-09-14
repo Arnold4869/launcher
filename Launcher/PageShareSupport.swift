@@ -134,10 +134,9 @@ enum PageShare {
 
     /// 视图层级里当前可见的 WKWebView（分屏等场景无法直接拿到实例时分屏上半屏优先）
     static func visibleWebView() -> WKWebView? {
-        guard let window = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap({ $0.windows })
-            .first(where: { $0.isKeyWindow }) else { return nil }
+        let scenes = UIApplication.shared.connectedScenes
+        let windows = scenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }
+        guard let window = windows.first(where: { $0.isKeyWindow }) else { return nil }
         var found: [(y: CGFloat, wv: WKWebView)] = []
         func walk(_ v: UIView) {
             if let wv = v as? WKWebView, !wv.isHidden, wv.alpha > 0.01,
