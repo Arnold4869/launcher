@@ -67,7 +67,7 @@ struct SplitViewScreen: View {
         .toolbar(.hidden, for: .navigationBar)
                 .overlay(alignment: .bottom) {
             // 底部浮动导航栏（悬浮在分屏之上，不改布局）
-            PageBottomBarLayer(mode: .page)
+            PageBottomBarLayer(mode: .page, currentPage: topPage)
                 .environmentObject(wm)
                 .environmentObject(store)
         }
@@ -194,8 +194,6 @@ struct SplitWebView: UIViewRepresentable {
             config.allowsInlineMediaPlayback = true
             config.mediaTypesRequiringUserActionForPlayback = []
             config.allowsPictureInPictureMediaPlayback = true
-            // 图片长按分享菜单（与全屏路径一致）
-            WebViewLongPressImage.install(into: config)
             let wv = WKWebView(frame: .zero, configuration: config)
             wv.allowsBackForwardNavigationGestures = true
             fresh = wv
@@ -213,7 +211,6 @@ struct SplitWebView: UIViewRepresentable {
             fresh.load(URLRequest(url: url))
         }
         fresh.navigationDelegate = context.coordinator
-        fresh.uiDelegate = WebViewContextMenuDelegate.shared
         fresh.currentBookmark = bm
         context.coordinator.page = page
         context.coordinator.onWebViewTap = onWebViewTap

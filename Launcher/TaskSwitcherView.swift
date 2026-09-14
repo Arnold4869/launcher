@@ -55,8 +55,9 @@ struct TaskSwitcherView: View {
                     // 导致上下照样大片空白），宽度按页面截图的宽高比（0.46）算，不再固定尺寸。
                     GeometryReader { geo in
                         let availH = geo.size.height
-                        // 140 = 上下边距 + 标题行 + 时间条的大致占用
-                        let cardH = max(180, availH - 140)
+                        // 卡片高度对齐 iOS Safari 多任务观感：约屏高 55% 封顶
+                        // （2.3.1 是"可用高度-140"填满 → 卡片几乎和屏幕一样大）
+                        let cardH = min(availH - 140, max(180, availH * 0.55))
                         let cardW = cardH * 0.46
                         ScrollViewReader { proxy in
                             ScrollView(.horizontal, showsIndicators: false) {

@@ -256,7 +256,6 @@ struct PageWebView: UIViewRepresentable {
         // 复用 PageState 缓存的 WKWebView 实例（后台/全屏/分屏间搬移不销毁）
         let webView = page.webView
         webView.navigationDelegate = context.coordinator
-        webView.uiDelegate = WebViewContextMenuDelegate.shared
         webView.pageZoom = zoom
         webView.currentBookmark = page.bookmark
         context.coordinator.edgeSwipeHome = edgeSwipeHome
@@ -514,11 +513,17 @@ struct PageBottomBar: View {
                 barButton("square.on.square", "多任务") { showTaskSwitcher = true }
                 barButton("plus", "新增") { showAdd = true }
             }
-            // 二级菜单：导入 / 导出 / 设置
+            // 二级菜单：分享页面 / 导入 / 导出 / 设置（分享只在网页形态出现：主页没有"当前页"，
+            // 分屏页 currentPage 为空时由 PageShare 自己在视图层级里找可见的那个 WebView）
             Menu {
+                if mode == .page {
+                    Button { PageShare.shareCurrentPage(currentPage?.webView) } label: {
+                        Label("分享页面", systemImage: "square.and.arrow.up")
+                    }
+                }
                 Button { showImporter = true } label: { Label("导入书签", systemImage: "square.and.arrow.down") }
                 ShareLink(item: store.exportURL(), preview: SharePreview("launcher-bookmarks.json")) {
-                    Label("导出书签", systemImage: "square.and.arrow.up")
+                    Label("导出书签", systemImage: "arrow.up.doc")
                 }
                 Button { showSettings = true } label: { Label("设置", systemImage: "gearshape") }
             } label: {
