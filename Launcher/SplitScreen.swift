@@ -194,6 +194,8 @@ struct SplitWebView: UIViewRepresentable {
             config.allowsInlineMediaPlayback = true
             config.mediaTypesRequiringUserActionForPlayback = []
             config.allowsPictureInPictureMediaPlayback = true
+            // 图片长按分享菜单（与全屏路径一致）
+            WebViewLongPressImage.install(into: config)
             let wv = WKWebView(frame: .zero, configuration: config)
             wv.allowsBackForwardNavigationGestures = true
             fresh = wv

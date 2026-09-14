@@ -51,11 +51,13 @@ struct TaskSwitcherView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    // 自适应布局：卡片尺寸按可用空间算（宽 → 高 16:9 比例），内容整行垂直居中，
-                    // 不再出现上下大片空白（原来固定 170x300 + 只给 32pt padding，剩下全是空）
+                    // 自适应布局：卡片高度按可用高度填满（2.3.0 只做了居中，高度卡在 320 上限
+                    // 导致上下照样大片空白），宽度按页面截图的宽高比（0.46）算，不再固定尺寸。
                     GeometryReader { geo in
-                        let cardW = min(180, geo.size.width * 0.46)
-                        let cardH = min(cardW * 1.78, max(220, geo.size.height - 100))
+                        let availH = geo.size.height
+                        // 140 = 上下边距 + 标题行 + 时间条的大致占用
+                        let cardH = max(180, availH - 140)
+                        let cardW = cardH * 0.46
                         ScrollViewReader { proxy in
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(alignment: .top, spacing: 16) {
@@ -74,8 +76,8 @@ struct TaskSwitcherView: View {
                                     }
                                 }
                                 .padding(.horizontal, 20)
-                                .padding(.vertical, 12)
-                                .frame(height: geo.size.height, alignment: .center)
+                                .padding(.vertical, 8)
+                                .frame(height: availH, alignment: .center)
                             }
                             .onAppear {
                                 if let cur = wm.pages.first(where: { $0.id == wm.fullscreenID }) {
@@ -204,8 +206,6 @@ private struct PageCardView: View {
     let onTimeLimit: () -> Void
 
     @State private var dragOffset: CGFloat = 0
-    /// 拖动轴向锁定（首次动 10pt 后确定）：true=纵向归卡片（上滑关闭），false=横向归 ScrollView
-    @State private var dragAxisLocked: Bool? = nil
 
     private var cardColors: [Color] {
         CardPalette.resolvedGradient(for: page.bookmark)
@@ -267,55 +267,35 @@ private struct PageCardView: View {
         }
         .offset(y: dragOffset)
         .opacity(dragOffset < 0 ? CGFloat(1) + dragOffset / CGFloat(400) : CGFloat(1))   // 上滑逐渐淡出
-        // 统一交互层：透明层覆盖整张卡（含预览图），保证在图上也能点/长按/上滑关闭。
-        // 之前手势挂在外层 VStack 上时，预览图区域收不到（只有下方标题区能上滑）。
-        // 拖动用 simultaneousGesture + 轴向锁定：横向滑动交还给 ScrollView 翻卡片，不被卡片手势抢走。
+        // 统一交互层（UIKit 实现，见 CardInteraction.swift）：透明层覆盖整张卡（含预览图），
+        // 点按/长按菜单/纵向拖动三合一。横向拖动由 DirectionalPan 主动 fail 让位给 ScrollView，
+        // 整张卡上都能左右滑动翻卡片（SwiftUI DragGesture 做不到，2.3.0 翻过车）。
         .overlay {
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture(perform: onTap)
-                .contextMenu {
-                    Button {
-                        onSplit()
-                    } label: {
-                        Label(isPending ? "取消分屏" : "分屏", systemImage: "rectangle.split.2x1")
+            CardInteractionLayer(
+                onTap: onTap,
+                onVerticalChanged: { dy in
+                    if dy < 0 { dragOffset = dy }
+                },
+                onVerticalEnded: { dy in
+                    if dy < -80 {
+                        withAnimation(.easeOut(duration: 0.15)) { dragOffset = -400 }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { onClose() }
+                    } else {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { dragOffset = 0 }
                     }
-                    Button {
-                        onEdit()
-                    } label: {
-                        Label("编辑书签", systemImage: "pencil")
-                    }
-                    Button {
-                        onTimeLimit()
-                    } label: {
-                        Label(page.bookmark.timeLimitEnabled ? "使用时间设置" : "设置使用时间", systemImage: "hourglass")
-                    }
+                },
+                menuItems: {
+                    [
+                        UIAction(title: isPending ? "取消分屏" : "分屏",
+                                 image: UIImage(systemName: "rectangle.split.2x1")) { _ in onSplit() },
+                        UIAction(title: "编辑书签", image: UIImage(systemName: "pencil")) { _ in onEdit() },
+                        UIAction(title: page.bookmark.timeLimitEnabled ? "使用时间设置" : "设置使用时间",
+                                 image: UIImage(systemName: "hourglass")) { _ in onTimeLimit() }
+                    ]
                 }
-                .simultaneousGesture(cardDragGesture)
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)   // representable 不给尺寸会塌成 0
+            .allowsHitTesting(true)
         }
-    }
-
-    /// 上滑关闭（类 iOS 后台卡片）：跟手拖动，越过阈值松手关闭。
-    /// 只接管纵向拖动（|dy| > |dx|），横向留给 ScrollView 滑动卡片。
-    private var cardDragGesture: some Gesture {
-        DragGesture(minimumDistance: 10)
-            .onChanged { v in
-                if dragAxisLocked == nil {
-                    dragAxisLocked = abs(v.translation.height) > abs(v.translation.width)
-                }
-                guard dragAxisLocked == true else { return }
-                if v.translation.height < 0 { dragOffset = v.translation.height }
-            }
-            .onEnded { v in
-                let wasCardDrag = dragAxisLocked == true
-                dragAxisLocked = nil
-                guard wasCardDrag else { return }
-                if v.translation.height < -80 {
-                    withAnimation(.easeOut(duration: 0.15)) { dragOffset = -400 }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { onClose() }
-                } else {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { dragOffset = 0 }
-                }
-            }
     }
 }

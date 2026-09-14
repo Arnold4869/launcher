@@ -22,6 +22,8 @@ final class PageState: ObservableObject, Identifiable {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsPictureInPictureMediaPlayback = true
+        // 图片长按分享菜单（JS 检测 + 原生菜单；公开 contextMenu 委托对纯图片不触发）
+        WebViewLongPressImage.install(into: config)
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.allowsBackForwardNavigationGestures = true
         heldWebView = wv
