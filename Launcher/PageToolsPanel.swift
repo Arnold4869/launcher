@@ -117,8 +117,8 @@ struct PageToolsPanel: View {
                         row("分享网址", "link") { PageShare.shareURL(wv) }
                     } else {
                         Menu {
-                            Button { PageShare.shareVisibleSnapshot(wv) } label: {
-                                Label("当前屏幕 PNG 截图", systemImage: "photo")
+                            Button { PageShare.shareFullPagePNG(wv) } label: {
+                                Label("整页 PNG 长图", systemImage: "photo")
                             }
                             Button { PageShare.shareFullPDF(wv) } label: {
                                 Label("整页 PDF", systemImage: "doc.richtext")

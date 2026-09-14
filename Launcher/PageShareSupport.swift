@@ -1,17 +1,25 @@
 import UIKit
 import WebKit
 
-// MARK: - 页面分享 v2（2.5.0）
+// MARK: - 页面分享
 //
-// 三种分享物，按当前页自适应：
+// 分享物按当前页自适应：
 //   • 当前页本身就是一张图（URL 后缀 / contentType / 整页一张图）→「分享图片」直接下载图本体分享
-//   • 普通网页 →「分享页面截图」= 可见区域全分辨率 PNG（takeSnapshot，不降采样）
-//              「分享页面 PDF」= WKWebView.createPDF 整页（官方 API，含全部已渲染内容）
+//   • 普通网页 →「整页 PNG 长图」= 逐屏滚动截图拼接成一张长图（takeSnapshot 只给可见区域，
+//                整页必须自己拼）；「整页 PDF」= WKWebView.createPDF（官方 API，一次出全篇）
 //   • 任何情况都可「分享网址」
 // 头文件名带书签名，微信/邮件里能看出是什么页面。
 
 enum PageShare {
     private static let imageExts: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "avif", "tiff", "svg"]
+
+    /// 整页长图：分段上限（防极端长页面把内存吃爆 + 无限滚动页面截不完）
+    private static let maxSegments = 40
+    /// 每段之间的等待：等滚动 + WebKit 提交新帧
+    private static let segmentDelay: Double = 0.35
+    /// 最终位图尺寸上限（像素高 / 总像素面积）
+    private static let maxPixelHeight: CGFloat = 12000
+    private static let maxPixelArea: CGFloat = 16_000_000
 
     /// 当前页是否为纯图片页（决定「分享页面」菜单项显示成「分享图片」）
     static func isImagePage(_ wv: WKWebView, done: @escaping (Bool) -> Void) {
@@ -22,19 +30,206 @@ enum PageShare {
         }
     }
 
-    /// 菜单项调用：图片页 → 分享图片本体；普通页 → 分享可见区域 PNG 截图
+    /// 菜单项调用：图片页 → 分享图片本体；普通页 → 整页 PNG 长图
     static func shareDefault(_ wv: WKWebView) {
         isImagePage(wv) { isImg in
             if isImg {
-                guard let url = wv.url else { shareVisibleSnapshot(wv); return }
-                shareImage(url: url, userAgent: wv.customUserAgent, name: wv.currentBookmark.name)
+                shareCurrentImage(wv)
             } else {
-                shareVisibleSnapshot(wv)
+                shareFullPagePNG(wv)
             }
         }
     }
 
-    // MARK: PNG 截图（可见区域，全分辨率）
+    // MARK: 整页 PNG 长图（逐屏滚动截图 + 拼接）
+    //
+    // takeSnapshot 只给「当前可见视口」，整页必须自己拼：先量 document 高度 → 按视口高逐屏滚动、
+    // 每屏截一张 → 按「本屏应覆盖的页面区间」裁切后贴到同一画布。
+    // 两个必须处理的坑：
+    //   ① 最后一段滚动会被 clamp 到最底部（scrollY = 页面高 - 视口高），若整屏直接贴会与上一屏
+    //      重影 → 只取「本屏尚未覆盖的那一段」的源图区域（cropping）。
+    //   ② position:fixed/sticky 元素（吸顶导航）会在每一屏重复出现 → 截图期间临时改 static，
+    //      截完恢复。截完还要把用户原来的滚动位置还原。
+    // 位图尺寸有上限（maxPixelHeight / maxPixelArea），长页面自动降采样，避免内存爆掉。
+
+    private struct PageMetrics: Decodable {
+        let h: Double
+        let w: Double
+        let y: Double
+        let vh: Double
+        let vw: Double
+    }
+
+    static func shareFullPagePNG(_ wv: WKWebView) {
+        showWaiting("正在生成整页截图…")
+        wv.evaluateJavaScript(metricsJS) { res, _ in
+            guard let s = res as? String,
+                  let data = s.data(using: .utf8),
+                  let m = try? JSONDecoder().decode(PageMetrics.self, from: data),
+                  m.h > 1, m.vh > 1 else {
+                // 量不到尺寸（受限页面/JS 被禁）→ 退化成可见区域截图，至少能分享出去
+                shareVisibleSnapshot(wv)
+                return
+            }
+            captureFullPage(wv, metrics: m)
+        }
+    }
+
+    private static func captureFullPage(_ wv: WKWebView, metrics m: PageMetrics) {
+        let viewportH = CGFloat(m.vh)
+        let pageH = CGFloat(m.h)
+        let totalH = min(pageH, viewportH * CGFloat(maxSegments))
+
+        // 画布缩放：像素高 + 总像素面积双封顶
+        var scale = min(UIScreen.main.scale, 2)
+        if totalH * scale > maxPixelHeight { scale = maxPixelHeight / totalH }
+        let widthPt = wv.bounds.width > 1 ? wv.bounds.width : CGFloat(m.vw)
+        if widthPt * totalH * scale * scale > maxPixelArea {
+            scale = sqrt(maxPixelArea / (widthPt * totalH))
+        }
+        scale = max(scale, 0.3)
+
+        let pxW = max(1, Int((widthPt * scale).rounded()))
+        let pxH = max(1, Int((totalH * scale).rounded()))
+        guard let ctx = CGContext(data: nil, width: pxW, height: pxH,
+                                  bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                                              | CGBitmapInfo.byteOrder32Little.rawValue) else {
+            hideWaiting(); showToastLater("整页截图失败：画布创建不了"); return
+        }
+        // 白底：PNG 不带透明，长图在深色聊天背景上也可读
+        ctx.setFillColor(UIColor.white.cgColor)
+        ctx.fill(CGRect(x: 0, y: 0, width: CGFloat(pxW), height: CGFloat(pxH)))
+
+        let originalY = CGFloat(m.y)
+        let segCount = max(1, Int(ceil(totalH / viewportH)))
+        // 先把吸顶/固定元素临时摊平，避免每屏重复
+        wv.evaluateJavaScript(neutralizeFixedJS, completionHandler: nil)
+
+        var index = 0
+
+        func finishUp() {
+            wv.evaluateJavaScript(restoreFixedJS, completionHandler: nil)
+            wv.evaluateJavaScript(scrollToJS(originalY), completionHandler: nil)
+            guard let cg = ctx.makeImage() else {
+                hideWaiting(); showToastLater("整页截图失败"); return
+            }
+            let img = UIImage(cgImage: cg, scale: scale, orientation: .up)
+            guard let png = img.pngData() else {
+                hideWaiting(); showToastLater("PNG 编码失败"); return
+            }
+            let name = sanitizedFileName(wv.currentBookmark.name.isEmpty ? "页面长图" : wv.currentBookmark.name)
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(name)-整页.png")
+            do {
+                try png.write(to: url, options: .atomic)
+            } catch {
+                hideWaiting(); showToastLater("长图保存失败"); return
+            }
+            hideWaiting()
+            shareItemsLater([url])
+        }
+
+        func captureNext() {
+            guard index < segCount else { finishUp(); return }
+            let i = index
+            let top = CGFloat(i) * viewportH                 // 本屏应覆盖的页面区间 [top, bottom)
+            let bottom = min(totalH, top + viewportH)
+            let scrollY = min(top, max(0, pageH - viewportH))   // 滚到底会被 clamp
+            wv.evaluateJavaScript(scrollToJS(scrollY)) { _, _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + segmentDelay) {
+                    updateWaiting("正在生成整页截图… \(i + 1)/\(segCount)")
+                    wv.takeSnapshot(with: nil) { image, _ in
+                        if let full = image?.cgImage, bottom > top {
+                            // 只取本屏「尚未覆盖」的那段源图，规避末屏 clamp 重影
+                            let srcTopPx = CGFloat(full.height) * ((top - scrollY) / viewportH)
+                            let srcHPx = CGFloat(full.height) * ((bottom - top) / viewportH)
+                            let src = CGRect(x: 0, y: srcTopPx.rounded(),
+                                             width: CGFloat(full.width),
+                                             height: max(1, srcHPx.rounded()))
+                            if let piece = full.cropping(to: src) {
+                                // CGContext 原点在左下：底对齐换算
+                                let yPx = (totalH - bottom) * scale
+                                ctx.draw(piece, in: CGRect(x: 0, y: yPx,
+                                                           width: CGFloat(pxW),
+                                                           height: (bottom - top) * scale))
+                            }
+                        }
+                        index += 1
+                        captureNext()
+                    }
+                }
+            }
+        }
+        captureNext()
+    }
+
+    /// 量页面尺寸（CSS px；scrollY / innerHeight 同单位）
+    private static let metricsJS = """
+    (function(){
+      try {
+        var d = document.documentElement, b = document.body;
+        var h = Math.max(d.scrollHeight, d.offsetHeight,
+                         b ? b.scrollHeight : 0, b ? b.offsetHeight : 0);
+        var w = Math.max(d.scrollWidth, d.clientWidth, b ? b.scrollWidth : 0);
+        var y = window.scrollY || window.pageYOffset || 0;
+        return JSON.stringify({h: Math.round(h), w: Math.round(w), y: Math.round(y),
+                               vh: Math.round(window.innerHeight), vw: Math.round(window.innerWidth)});
+      } catch (e) { return ''; }
+    })();
+    """
+
+    /// 截图期间把 fixed/sticky 摊平成 static（吸顶导航只出现一次，不在每屏重复）。
+    /// 保守处理：跳过高度接近视口的元素 —— 那多半是「整页用 fixed 搭壳」的 app 式页面，
+    /// 摊平会直接改坏布局。
+    private static let neutralizeFixedJS = """
+    (function(){
+      try {
+        if (window.__launcherFixedSaved) return '0';
+        var vh = window.innerHeight || 0;
+        var saved = [], all = document.querySelectorAll('*');
+        for (var i = 0; i < all.length; i++) {
+          var el = all[i];
+          var cs = window.getComputedStyle(el);
+          if (cs && (cs.position === 'fixed' || cs.position === 'sticky')) {
+            var r = el.getBoundingClientRect();
+            if (vh > 0 && r.height >= vh * 0.9) continue;   // 疑似布局壳，不动
+            saved.push({el: el, pos: el.style.position});
+            try { el.style.setProperty('position', 'static', 'important'); } catch (e2) {}
+          }
+        }
+        window.__launcherFixedSaved = saved;
+        return String(saved.length);
+      } catch (e) { return ''; }
+    })();
+    """
+
+    private static let restoreFixedJS = """
+    (function(){
+      try {
+        var saved = window.__launcherFixedSaved;
+        if (!saved) return '';
+        for (var i = 0; i < saved.length; i++) {
+          try {
+            if (saved[i].pos) {
+              saved[i].el.style.setProperty('position', saved[i].pos, 'important');
+            } else {
+              saved[i].el.style.removeProperty('position');
+            }
+          } catch (e2) {}
+        }
+        window.__launcherFixedSaved = null;
+        return 'ok';
+      } catch (e) { return ''; }
+    })();
+    """
+
+    private static func scrollToJS(_ y: CGFloat) -> String {
+        "try{window.scrollTo(0,\(Int(y.rounded())));}catch(e){}"
+    }
+
+    // MARK: PNG 截图（可见区域，全分辨率）—— 仅作整页失败时的兜底
     static func shareVisibleSnapshot(_ wv: WKWebView) {
         showWaiting("正在生成截图…")
         wv.takeSnapshot(with: nil) { image, _ in
@@ -215,6 +410,10 @@ enum PageShare {
         w.isHidden = false
         hudWindow = w
         hudLabel = label
+    }
+
+    private static func updateWaiting(_ msg: String) {
+        hudLabel?.text = msg
     }
 
     private static func hideWaiting() {
