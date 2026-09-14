@@ -39,10 +39,10 @@ enum PageShare {
         showWaiting("正在生成截图…")
         wv.takeSnapshot(with: nil) { image, _ in
             guard let img = image else {
-                hideWaiting(); showToast("截图失败"); return
+                hideWaiting(); showToastLater("截图失败"); return
             }
             guard let png = img.pngData() else {
-                hideWaiting(); showToast("PNG 编码失败"); return
+                hideWaiting(); showToastLater("PNG 编码失败"); return
             }
             let name = sanitizedFileName(wv.currentBookmark.name.isEmpty ? "页面截图" : wv.currentBookmark.name)
             let url = FileManager.default.temporaryDirectory
@@ -50,20 +50,18 @@ enum PageShare {
             do {
                 try png.write(to: url, options: .atomic)
             } catch {
-                hideWaiting(); showToast("截图保存失败"); return
+                hideWaiting(); showToastLater("截图保存失败"); return
             }
             hideWaiting()
-            shareItems([url])
+            // 等 HUD 消失再弹分享面板：iOS 不允许在 present 过程中叠 present
+            shareItemsLater([url])
         }
     }
 
-    // MARK: 整页 PDF（官方 createPDF，含整个已渲染内容）
+    // MARK: 整页 PDF（官方 createPDF；rect 留 nil = 整页，.zero 是 0×0 空白 PDF）
     static func shareFullPDF(_ wv: WKWebView) {
         showWaiting("正在生成 PDF…")
-        let cfg = WKPDFConfiguration()
-        // rect 留 zero = 整页（文档行为）
-        cfg.rect = .zero
-        wv.createPDF(configuration: cfg) { result in
+        wv.createPDF(configuration: WKPDFConfiguration()) { result in
             switch result {
             case .success(let data):
                 let name = sanitizedFileName(wv.currentBookmark.name.isEmpty ? "页面" : wv.currentBookmark.name)
@@ -72,13 +70,13 @@ enum PageShare {
                 do {
                     try data.write(to: url, options: .atomic)
                 } catch {
-                    hideWaiting(); showToast("PDF 保存失败"); return
+                    hideWaiting(); showToastLater("PDF 保存失败"); return
                 }
                 hideWaiting()
-                shareItems([url])
+                shareItemsLater([url])
             case .failure:
                 hideWaiting()
-                showToast("PDF 生成失败")
+                showToastLater("PDF 生成失败")
             }
         }
     }
@@ -152,15 +150,15 @@ enum PageShare {
         return found.sorted { $0.y < $1.y }.first?.wv
     }
 
-    /// 下载图片本体分享（带 WebView cookie + UA，登录站点也能下）；失败退化为分享图片链接
+    /// 分享图片本体（带 WebView cookie + UA，登录站点也能下）；失败退化为分享图片链接
     static func shareImage(url: URL, userAgent: String?, name: String = "") {
         showWaiting("正在获取图片…")
         downloadImage(url: url, userAgent: userAgent) { img in
             hideWaiting()
             if let img {
-                shareItems([img])
+                shareItemsLater([img])
             } else {
-                shareItems([url.absoluteString])
+                shareItemsLater([url.absoluteString])
             }
         }
     }
@@ -184,20 +182,45 @@ enum PageShare {
     }
 
     // MARK: 等待浮层（生成 PNG/PDF 可能要一两秒，给个反馈）
+    //
+    // ⚠️ 不能用 UIAlertController/任何 UIViewController.present：
+    // dismiss 它之后立刻 present 分享面板 = iOS 拒绝（"attempt to present while presenting"），
+    // 分享面板无声无息不出现 —— 这就是 2.5.0 分享"点了没反应"的根因之一。
+    // 所以 HUD 用自绘 UIWindow，不占 present 栈。
 
-    private static var waitingAlert: UIAlertController?
+    private static var hudWindow: UIWindow?
+    private static var hudLabel: UILabel?
 
     private static func showWaiting(_ msg: String) {
         hideWaiting()
-        guard let top = topViewController() else { return }
-        let a = UIAlertController(title: nil, message: msg, preferredStyle: .alert)
-        waitingAlert = a
-        top.present(a, animated: true)
+        let scenes = UIApplication.shared.connectedScenes
+        guard let scene = scenes.compactMap({ $0 as? UIWindowScene }).first else { return }
+        let w = UIWindow(windowScene: scene)
+        w.windowLevel = .alert + 1
+        w.backgroundColor = UIColor.black.withAlphaComponent(0.65)
+        w.layer.cornerRadius = 14
+        w.bounds = CGRect(x: 0, y: 0, width: 170, height: 84)
+
+        let label = UILabel()
+        label.text = msg
+        label.textColor = .white
+        label.font = .systemFont(ofSize: 14, weight: .medium)
+        label.textAlignment = .center
+        label.numberOfLines = 2
+        label.frame = w.bounds
+        w.addSubview(label)
+
+        w.center = scene.windows.first?.center ?? CGPoint(x: 200, y: 400)
+        // 只显示、不抢 key：抢 key 会干扰键盘/系统弹窗
+        w.isHidden = false
+        hudWindow = w
+        hudLabel = label
     }
 
     private static func hideWaiting() {
-        waitingAlert?.dismiss(animated: false)
-        waitingAlert = nil
+        hudWindow?.isHidden = true
+        hudWindow = nil
+        hudLabel = nil
     }
 
     static func shareItems(_ items: [Any]) {
@@ -205,6 +228,13 @@ enum PageShare {
         let vc = UIActivityViewController(activityItems: items, applicationActivities: nil)
         vc.popoverPresentationController?.sourceView = top.view
         top.present(vc, animated: true)
+    }
+
+    /// 分享面板延迟弹：确认 HUD 已消失、上一个 presentation 已收尾（iOS 不允许叠 present）
+    static func shareItemsLater(_ items: [Any]) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            shareItems(items)
+        }
     }
 
     static func topViewController() -> UIViewController? {
@@ -222,5 +252,12 @@ enum PageShare {
         let alert = UIAlertController(title: nil, message: msg, preferredStyle: .alert)
         top.present(alert, animated: true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { alert.dismiss(animated: true) }
+    }
+
+    /// toast 延迟弹：同样避开 present 冲突（hideWaiting 之后紧接 showToast 会互吃）
+    static func showToastLater(_ msg: String) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            showToast(msg)
+        }
     }
 }

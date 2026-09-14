@@ -134,6 +134,11 @@ struct SplitViewScreen: View {
                     .environmentObject(store)
             }
         }
+        // 工具面板/快捷设置里改的属性同步到两个半屏的 PageState（值拷贝会回退旧值）
+        .onReceive(store.$bookmarks) { list in
+            if let tp = topPage, let m = list.first(where: { $0.id == tp.bookmark.id }), tp.bookmark != m { tp.bookmark = m }
+            if let bp = bottomPage, let m = list.first(where: { $0.id == bp.bookmark.id }), bp.bookmark != m { bp.bookmark = m }
+        }
         .onAppear {
             // 每次进入分屏都初始化为标准 55/45 分割（上次关一半残留的 0/1 不再带进来）
             topFraction = savedFraction <= 0.05 || savedFraction >= 0.95 ? 0.5 : savedFraction

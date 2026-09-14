@@ -26,6 +26,7 @@ struct PageToolsPanel: View {
 
     @State private var isImagePage = false
     @State private var copied = false
+    @State private var pendingAction: (() -> Void)? = nil
     @State private var showSettings = false
     @State private var showImporter = false
     @State private var importMessage: String?
@@ -107,19 +108,22 @@ struct PageToolsPanel: View {
                 }
 
                 // ③ 分享
+                // ⚠️ 分享类动作**不关面板**：直接在面板上弹分享面板。
+                // 关面板再弹的写法有致命时序问题——sheet 收尾动画约 0.35s，期间 present 会被
+                // iOS 静默拒绝（分享面板根本不出现），这正是 2.5.0「分享点了没反应」的原因。
                 Section("分享") {
                     if isImagePage {
-                        row("分享图片", "photo") { closeThen { PageShare.shareCurrentImage(wv) } }
-                        row("分享网址", "link") { closeThen { PageShare.shareURL(wv) } }
+                        row("分享图片", "photo") { PageShare.shareCurrentImage(wv) }
+                        row("分享网址", "link") { PageShare.shareURL(wv) }
                     } else {
                         Menu {
-                            Button { closeThen { PageShare.shareVisibleSnapshot(wv) } } label: {
+                            Button { PageShare.shareVisibleSnapshot(wv) } label: {
                                 Label("当前屏幕 PNG 截图", systemImage: "photo")
                             }
-                            Button { closeThen { PageShare.shareFullPDF(wv) } } label: {
+                            Button { PageShare.shareFullPDF(wv) } label: {
                                 Label("整页 PDF", systemImage: "doc.richtext")
                             }
-                            Button { closeThen { PageShare.shareURL(wv) } } label: {
+                            Button { PageShare.shareURL(wv) } label: {
                                 Label("只分享网址", systemImage: "link")
                             }
                         } label: {
@@ -181,6 +185,12 @@ struct PageToolsPanel: View {
             } message: {
                 Text(importMessage ?? "")
             }
+            .onDisappear {
+                // 面板收尾完成后再执行等待中的动作（查找/缩放）
+                guard let action = pendingAction else { return }
+                pendingAction = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: action)
+            }
         }
         // 面板本身是工具面板，.medium 高度够用且不遮住整个网页
         .presentationDetents([.medium, .large])
@@ -202,10 +212,11 @@ struct PageToolsPanel: View {
         }
     }
 
-    /// 关掉面板再执行（否则「面板 dismiss」和「宿主开新 sheet」同时发生会互相吃掉）
+    /// 关掉面板再执行（用于「查找页面」「页面缩放」这类要换 sheet 的动作）。
+    /// 走 onDisappear 触发：等收尾动画真的结束再开下一个 sheet，否则两个 presentation 互吃。
     private func closeThen(_ action: @escaping () -> Void) {
+        pendingAction = action
         dismiss()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: action)
     }
 
     /// 切访问标识：写回书签（持久化）+ 立刻作用到当前 WebView 并重载

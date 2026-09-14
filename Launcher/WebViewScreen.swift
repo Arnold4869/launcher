@@ -122,8 +122,10 @@ struct FullscreenPage: View {
         }
         // 工具面板/快捷设置里改了访问标识 → 同步到本页 @State（否则 QuickSettings 的绑定是旧值）
         .onReceive(store.$bookmarks) { list in
-            if let m = list.first(where: { $0.id == page.bookmark.id })?.uaMode, m != uaMode {
-                uaMode = m
+            if let m = list.first(where: { $0.id == page.bookmark.id }) {
+                // PageState.bookmark 也同步：它是值拷贝，不同步则退出页面再进来 UA/名称回退旧值
+                if page.bookmark != m { page.bookmark = m }
+                if m.uaMode != uaMode { uaMode = m.uaMode }
             }
         }
     }
@@ -506,7 +508,10 @@ struct PageBottomBarLayer: View {
             // 常驻挂载：隐藏 = 移出屏幕 + 透明 + 不响应点击，视图不销毁
             // 这样挂在本视图上的 sheet（多任务/分屏/设置等）不会被「自动隐藏」连带关掉
             PageBottomBar(mode: mode, currentPage: currentPage, onMore: onMore, onFind: onFind)
-                .offset(y: visible ? 0 : 140)
+                // 页面层整层 ignoresSafeArea（LauncherApp），底栏会贴到屏幕绝对底部、
+                // 比主页低一条小白条区域 → 手动补回底部安全区，与主页对齐
+                .padding(.bottom, Self.bottomSafeInset)
+                .offset(y: visible ? 0 : 140 + Self.bottomSafeInset)
                 .opacity(visible ? 1 : 0)
                 .allowsHitTesting(visible)
         }
@@ -516,6 +521,14 @@ struct PageBottomBarLayer: View {
             visible = true
             scheduleHide()
         }
+    }
+
+    /// keyWindow 底部安全区高度（主页小白条 ≈34pt；home 模式不经过本层，天然避让）
+    static var bottomSafeInset: CGFloat {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+        return windows.first(where: { $0.isKeyWindow })?.safeAreaInsets.bottom ?? 0
     }
 
     private func scheduleHide() {
@@ -588,6 +601,9 @@ struct PageBottomBar: View {
         // .primary 文字在任何网页底色上都可辨识；.clear 只该给悬浮钮这类媒体上方小控件。
         // 不加 tint —— 之前的蓝色 tint 既压不住底噪也让图标偏色。
         .launcherGlass(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        // 玻璃可见区域整体接管触摸：没有它，玻璃边缘/字缝的点击会穿透到下面
+        // （主页穿透=误开书签，网页穿透=误触页面内容）
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
         .sheet(isPresented: $showTaskSwitcher) {

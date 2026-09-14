@@ -8,7 +8,10 @@ import Combine
 /// 后台/全屏/分屏之间切换 = 同一 WKWebView 在不同容器间搬移，浏览状态全程保留。
 final class PageState: ObservableObject, Identifiable {
     let id = UUID()
-    let bookmark: Bookmark
+    /// 当前书签值。是 var + @Published：store 里编辑书签（改名/切UA/限时）后要同步回来，
+    /// 否则 PageState 持有旧值拷贝 —— 表现为「切了访问标识一退出就回退」、多任务卡片信息不刷新。
+    /// 同步点：FullscreenPage / SplitViewScreen 的 onReceive(store.$bookmarks)。
+    @Published var bookmark: Bookmark
     /// 多任务卡片实时缩略图（didFinish 导航后刷新）
     @Published var snapshot: UIImage? = nil
     /// 当前网页标题（快照下的小字）
