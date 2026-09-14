@@ -28,10 +28,10 @@ struct SplitViewScreen: View {
 
                 if topFraction > 0.02 && topFraction < 0.98 {
                     // 分隔条拉杆：拖到最上/最下 = 关闭对应半屏
+                    // 不透明底色垫底（跟页面层一致）：拉杆是透明的，不垫会透出底下常挂的主页内容
                     Rectangle()
-                        .fill(Color.clear)
+                        .fill(Color(.systemBackground))
                         .frame(height: 14)
-                        .contentShape(Rectangle())
                         .overlay {
                             // 【玻璃 → 原生 glassEffect/.regular】分隔条拉杆=拖拽控件
                             Capsule()
@@ -39,6 +39,7 @@ struct SplitViewScreen: View {
                                 .frame(width: 60, height: 5)
                                 .launcherGlass(.regular, in: .capsule, interactive: false)
                         }
+                        .contentShape(Rectangle())
                         .gesture(
                             DragGesture()
                                 .onChanged { v in
@@ -210,6 +211,7 @@ struct SplitWebView: UIViewRepresentable {
             fresh.load(URLRequest(url: url))
         }
         fresh.navigationDelegate = context.coordinator
+        fresh.uiDelegate = WebViewContextMenuDelegate.shared
         fresh.currentBookmark = bm
         context.coordinator.page = page
         context.coordinator.onWebViewTap = onWebViewTap

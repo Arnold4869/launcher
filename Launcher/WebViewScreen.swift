@@ -256,6 +256,7 @@ struct PageWebView: UIViewRepresentable {
         // 复用 PageState 缓存的 WKWebView 实例（后台/全屏/分屏间搬移不销毁）
         let webView = page.webView
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = WebViewContextMenuDelegate.shared
         webView.pageZoom = zoom
         webView.currentBookmark = page.bookmark
         context.coordinator.edgeSwipeHome = edgeSwipeHome

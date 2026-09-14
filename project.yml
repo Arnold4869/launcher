@@ -28,3 +28,4 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        NSPhotoLibraryAddUsageDescription: 需要访问相册以保存网页中的图片

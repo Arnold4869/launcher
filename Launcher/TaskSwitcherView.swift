@@ -51,27 +51,36 @@ struct TaskSwitcherView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    ScrollViewReader { proxy in
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(alignment: .top, spacing: 16) {
-                                newPageCard
-                                ForEach(wm.pages) { page in
-                                    PageCardView(page: page,
-                                                 isPending: pendingTop?.id == page.bookmark.id,
-                                                 onTap: { handleMainTap(page) },
-                                                 onSplit: { handleSplitTap(page) },
-                                                 onClose: { wm.closePage(page.id) },
-                                                 onEdit: { editingBookmark = page.bookmark },
-                                                 onTimeLimit: { timeLimitBookmark = page.bookmark })
-                                        .id(page.id)
+                    // 自适应布局：卡片尺寸按可用空间算（宽 → 高 16:9 比例），内容整行垂直居中，
+                    // 不再出现上下大片空白（原来固定 170x300 + 只给 32pt padding，剩下全是空）
+                    GeometryReader { geo in
+                        let cardW = min(180, geo.size.width * 0.46)
+                        let cardH = min(cardW * 1.78, max(220, geo.size.height - 100))
+                        ScrollViewReader { proxy in
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(alignment: .top, spacing: 16) {
+                                    newPageCard(width: cardW, height: cardH)
+                                    ForEach(wm.pages) { page in
+                                        PageCardView(page: page,
+                                                     width: cardW,
+                                                     height: cardH,
+                                                     isPending: pendingTop?.id == page.bookmark.id,
+                                                     onTap: { handleMainTap(page) },
+                                                     onSplit: { handleSplitTap(page) },
+                                                     onClose: { wm.closePage(page.id) },
+                                                     onEdit: { editingBookmark = page.bookmark },
+                                                     onTimeLimit: { timeLimitBookmark = page.bookmark })
+                                            .id(page.id)
+                                    }
                                 }
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 12)
+                                .frame(height: geo.size.height, alignment: .center)
                             }
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 32)
-                        }
-                        .onAppear {
-                            if let cur = wm.pages.first(where: { $0.id == wm.fullscreenID }) {
-                                proxy.scrollTo(cur.id, anchor: .center)
+                            .onAppear {
+                                if let cur = wm.pages.first(where: { $0.id == wm.fullscreenID }) {
+                                    proxy.scrollTo(cur.id, anchor: .center)
+                                }
                             }
                         }
                     }
@@ -100,7 +109,7 @@ struct TaskSwitcherView: View {
     }
 
     // MARK: 新开页面卡片
-    private var newPageCard: some View {
+    private func newPageCard(width: CGFloat, height: CGFloat) -> some View {
         Button {
             pendingTop = nil; pendingTopPage = nil
             wm.goHome()
@@ -109,7 +118,7 @@ struct TaskSwitcherView: View {
             VStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .fill(Color(.tertiarySystemGroupedBackground).opacity(0.5))
-                    .frame(width: 170, height: 300)
+                    .frame(width: width, height: height)
                     .overlay(
                         RoundedRectangle(cornerRadius: 22, style: .continuous)
                             .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 5]))
@@ -185,6 +194,8 @@ struct TaskSwitcherView: View {
 // MARK: - 单张页面卡片（独立 View + @ObservedObject，快照/标题变化实时刷新）
 private struct PageCardView: View {
     @ObservedObject var page: PageState
+    let width: CGFloat
+    let height: CGFloat
     let isPending: Bool
     let onTap: () -> Void
     let onSplit: () -> Void
@@ -193,6 +204,8 @@ private struct PageCardView: View {
     let onTimeLimit: () -> Void
 
     @State private var dragOffset: CGFloat = 0
+    /// 拖动轴向锁定（首次动 10pt 后确定）：true=纵向归卡片（上滑关闭），false=横向归 ScrollView
+    @State private var dragAxisLocked: Bool? = nil
 
     private var cardColors: [Color] {
         CardPalette.resolvedGradient(for: page.bookmark)
@@ -216,7 +229,7 @@ private struct PageCardView: View {
                             }
                     }
                 }
-                .frame(width: 170, height: 300)
+                .frame(width: width, height: height)
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 // 抬升投影（iOS 后台卡片质感），不用 hairline 灰描边
                 .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 5)
@@ -244,50 +257,65 @@ private struct PageCardView: View {
             // 时间信息（设了限时的书签才显示）：已用/限额 + 进度条
             if page.bookmark.timeLimitEnabled {
                 UsageBadge(bookmark: page.bookmark)
-                    .frame(width: 170)
+                    .frame(width: width)
             }
 
             Text(page.pageTitle.isEmpty ? page.bookmark.name : page.pageTitle)
                 .font(.subheadline.weight(.medium))
                 .lineLimit(1)
-                .frame(width: 170)
+                .frame(width: width)
         }
         .offset(y: dragOffset)
         .opacity(dragOffset < 0 ? CGFloat(1) + dragOffset / CGFloat(400) : CGFloat(1))   // 上滑逐渐淡出
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
-        // 长按出现操作：分屏（关闭改上滑手势）
-        .contextMenu {
-            Button {
-                onSplit()
-            } label: {
-                Label(isPending ? "取消分屏" : "分屏", systemImage: "rectangle.split.2x1")
-            }
-            Button {
-                onEdit()
-            } label: {
-                Label("编辑书签", systemImage: "pencil")
-            }
-            Button {
-                onTimeLimit()
-            } label: {
-                Label(page.bookmark.timeLimitEnabled ? "使用时间设置" : "设置使用时间", systemImage: "hourglass")
-            }
-        }
-        // 上滑关闭（类 iOS 后台卡片）：跟手拖动，越过阈值松手关闭
-        .gesture(
-            DragGesture(minimumDistance: 10)
-                .onChanged { v in
-                    if v.translation.height < 0 { dragOffset = v.translation.height }
-                }
-                .onEnded { v in
-                    if v.translation.height < -80 {
-                        withAnimation(.easeOut(duration: 0.15)) { dragOffset = -400 }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { onClose() }
-                    } else {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { dragOffset = 0 }
+        // 统一交互层：透明层覆盖整张卡（含预览图），保证在图上也能点/长按/上滑关闭。
+        // 之前手势挂在外层 VStack 上时，预览图区域收不到（只有下方标题区能上滑）。
+        // 拖动用 simultaneousGesture + 轴向锁定：横向滑动交还给 ScrollView 翻卡片，不被卡片手势抢走。
+        .overlay {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onTap)
+                .contextMenu {
+                    Button {
+                        onSplit()
+                    } label: {
+                        Label(isPending ? "取消分屏" : "分屏", systemImage: "rectangle.split.2x1")
+                    }
+                    Button {
+                        onEdit()
+                    } label: {
+                        Label("编辑书签", systemImage: "pencil")
+                    }
+                    Button {
+                        onTimeLimit()
+                    } label: {
+                        Label(page.bookmark.timeLimitEnabled ? "使用时间设置" : "设置使用时间", systemImage: "hourglass")
                     }
                 }
-        )
+                .simultaneousGesture(cardDragGesture)
+        }
+    }
+
+    /// 上滑关闭（类 iOS 后台卡片）：跟手拖动，越过阈值松手关闭。
+    /// 只接管纵向拖动（|dy| > |dx|），横向留给 ScrollView 滑动卡片。
+    private var cardDragGesture: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged { v in
+                if dragAxisLocked == nil {
+                    dragAxisLocked = abs(v.translation.height) > abs(v.translation.width)
+                }
+                guard dragAxisLocked == true else { return }
+                if v.translation.height < 0 { dragOffset = v.translation.height }
+            }
+            .onEnded { v in
+                let wasCardDrag = dragAxisLocked == true
+                dragAxisLocked = nil
+                guard wasCardDrag else { return }
+                if v.translation.height < -80 {
+                    withAnimation(.easeOut(duration: 0.15)) { dragOffset = -400 }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { onClose() }
+                } else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { dragOffset = 0 }
+                }
+            }
     }
 }
