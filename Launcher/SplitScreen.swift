@@ -323,7 +323,7 @@ struct SplitPickerView: View {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
                             ForEach(openPages) { page in
                                 Button { pick(page.bookmark, page: page) } label: {
-                                    BookmarkCard(bm: page.bookmark)
+                                    BookmarkCard(bm: page.bookmark, variant: .solid)
                                 }
                             }
                         }
@@ -335,7 +335,7 @@ struct SplitPickerView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
                     ForEach(store.bookmarks.filter { $0.id != top.id }) { bm in
                         Button { pick(bm, page: nil) } label: {
-                            BookmarkCard(bm: bm)
+                            BookmarkCard(bm: bm, variant: .solid)
                         }
                     }
                 }

@@ -5,3 +5,5 @@ DerivedData/
 output/
 *.ipa
 artifact.zip
+# 设计原型稿（sketch 用途，不入库）
+sketches/

@@ -107,10 +107,40 @@ struct LauncherGlassButtonStyle: ButtonStyle {
 
 extension View {
     /// 项目统一玻璃入口。iOS 26+ = 原生 glassEffect；<26 = Material 降级
+    /// ⚠️ 只给「导航层/悬浮控件」（工具栏、悬浮钮、Sheet 标题栏）用，内容卡片走 launcherGlassCard
     func launcherGlass(_ style: LauncherGlassStyle = .regular,
                        in shape: some Shape = .capsule,
                        interactive: Bool = false) -> some View {
         modifier(LauncherGlassModifier(style: style, shape: shape, interactive: interactive))
+    }
+
+    /// 【内容卡玻璃】主页玻璃浮岛专用（2.6.0）
+    ///
+    /// 为什么不用 launcherGlass（Liquid Glass）：
+    /// 1. 规范约束：Apple HIG / 本项目 GlassSupport 约定「玻璃只用于导航层与悬浮控件，
+    ///    内容卡片/列表禁止」——主页书签卡属于内容，不该用原生 glassEffect
+    /// 2. 性能：网格里可能同时存在 20+ 张卡，逐个 glassEffect（lens 折射+动态高光）开销大，
+    ///    滚动会掉帧；Material 有系统级缓存，成本低一个量级
+    /// 3. 视觉：.ultraThinMaterial + 淡色 tint 已经能给出「淡色透玻璃」观感（老板定稿效果）
+    ///
+    /// 所有系统版本统一用 Material（不做 iOS26 分支），保证卡片观感一致。
+    /// 刻意不做泛型形状参数：全部调用点都用同款圆角矩形，写死可避免泛型默认值的类型推断风险
+    func launcherGlassCard(tint: Color? = nil, cornerRadius: CGFloat = 18) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return self.background(
+            ZStack {
+                // ⚠️ 阴影只加在玻璃底上，不能加在整个 view 上
+                // （.background{} 后再 .shadow 会把阴影也刷到文字/图标上，字形发脏）
+                shape.fill(Material.ultraThinMaterial)
+                    .shadow(color: .black.opacity(0.10), radius: 6, x: 0, y: 3)
+                if let tint {
+                    // 淡色透玻璃：低透明度平铺（不用 blendMode，避免 overlay 混色在不同背景上不可控）
+                    shape.fill(tint.opacity(0.16))
+                }
+                // 玻璃高光边：让卡片从背景上"浮"起来（原生玻璃自带，Material 要手补）
+                shape.strokeBorder(Color.white.opacity(0.35), lineWidth: 0.8)
+            }
+        )
     }
 
     /// 按钮玻璃样式：iOS 26+ 用 .glass/.glassProminent，<26 降级
