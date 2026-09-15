@@ -159,7 +159,8 @@ struct SplitViewScreen: View {
     /// 半屏内容：有 PageState 复用其常驻 WebView，否则新建
     @ViewBuilder
     private func halfView(for bm: Bookmark, page: PageState?) -> some View {
-        SplitWebView(bm: bm, page: page, onWebViewTap: {
+        SplitWebView(bm: bm, page: page, onBarReveal: {
+            // 三指向下滑 → 唤出底部导航栏（作用于上半屏，与全屏页同一通知）
             NotificationCenter.default.post(name: .launcherPageTapped, object: nil)
         })
     }
@@ -183,14 +184,14 @@ struct SplitViewScreen: View {
 struct SplitWebView: UIViewRepresentable {
     let bm: Bookmark
     var page: PageState? = nil
-    /// 单击网页空白处回调（底部导航栏唤出用；不吞触摸）
-    var onWebViewTap: (() -> Void)? = nil
+    /// 三指向下滑唤出底栏（2.6.1 起取代「单击任意处」）
+    var onBarReveal: (() -> Void)? = nil
 
     final class Coordinator: NSObject, WKNavigationDelegate, UIGestureRecognizerDelegate {
-        var onWebViewTap: (() -> Void)? = nil
+        var onBarReveal: (() -> Void)? = nil
         var clearRefreshObserver: NSObjectProtocol? = nil
         var lastFontAdjust: Double? = nil
-        @objc func webViewTapped() { onWebViewTap?() }
+        @objc func barRevealed() { onBarReveal?() }
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
         deinit {
@@ -224,10 +225,10 @@ struct SplitWebView: UIViewRepresentable {
         if let page {
             // 复用常驻实例：重新接上 delegate（Basic Auth / 登录填充），不重载页面
             fresh = page.webView
-            // 摘掉全屏路径挂的边缘手势（target 已随旧 Coordinator 释放，避免悬垂）
-            for g in fresh.gestureRecognizers ?? [] where g is UIScreenEdgePanGestureRecognizer {
-                fresh.removeGestureRecognizer(g)
-            }
+            // 2.6.1 不再摘边缘手势：
+            // ① 按类型删 UIScreenEdgePanGestureRecognizer 会把 WebKit 原生页内后退手势一起删掉（同类型实例）；
+            // ② 旧版自定义边缘手势已随 2.6.1 删除，不存在「新挂的悬垂 target」问题，
+            //    PageState 缓存实例不跨 App 重启存活，升级后首次拿到的一律是新 WebView。
         } else {
             let config = WKWebViewConfiguration()
             config.websiteDataStore = WKWebsiteDataStore.default()
@@ -253,18 +254,20 @@ struct SplitWebView: UIViewRepresentable {
         fresh.navigationDelegate = context.coordinator
         fresh.currentBookmark = bm
         context.coordinator.page = page
-        context.coordinator.onWebViewTap = onWebViewTap
-        // 浏览器式：单击网页任意处唤出底部导航栏；不吞触摸
+        context.coordinator.onBarReveal = onBarReveal
+        // 三指向下滑唤出底部导航栏（2.6.1 起取代「单击任意处」，减少误触发）
         // 先清旧手势再挂（旧手势 target 指向已释放的旧 Coordinator，锁屏重挂后会失效）
-        for g in (fresh.gestureRecognizers ?? []) where g.name == "barRevealTap" {
+        for g in (fresh.gestureRecognizers ?? []) where g.name == "barRevealSwipe" || g.name == "barRevealTap" {
             fresh.removeGestureRecognizer(g)
         }
-        if onWebViewTap != nil {
-            let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.webViewTapped))
-            tap.name = "barRevealTap"
-            tap.cancelsTouchesInView = false
-            tap.delegate = context.coordinator
-            fresh.addGestureRecognizer(tap)
+        if onBarReveal != nil {
+            let swipe = UISwipeGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.barRevealed))
+            swipe.name = "barRevealSwipe"
+            swipe.numberOfTouchesRequired = 3
+            swipe.direction = .down
+            swipe.cancelsTouchesInView = false
+            swipe.delegate = context.coordinator
+            fresh.addGestureRecognizer(swipe)
         }
         // 清缓存刷新（分屏 FAB 触发时上下两半都要响应）
         context.coordinator.clearRefreshObserver = NotificationCenter.default.addObserver(

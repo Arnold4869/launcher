@@ -50,9 +50,8 @@ struct FullscreenPage: View {
     var body: some View {
         ZStack {
             PageWebView(page: page, zoom: zoom, fontAdjust: fontAdjust, uaMode: uaMode,
-                        edgeSwipeHome: { wm.goHome() },
-                        onWebViewTap: {
-                            // 只发通知，不在页面本体改状态（避免 WebView 重绘）
+                        onBarReveal: {
+                            // 三指向下滑 → 唤出底部导航栏
                             NotificationCenter.default.post(name: .launcherPageTapped, object: nil)
                         })
         }
@@ -237,13 +236,11 @@ struct PageWebView: UIViewRepresentable {
     var zoom: Double = 1.0
     var fontAdjust: Double = 0
     var uaMode: Int = 0
-    var edgeSwipeHome: (() -> Void)? = nil
-    /// 单击网页空白处回调（底部导航栏唤出用；不吞触摸）
-    var onWebViewTap: (() -> Void)? = nil
+    /// 三指向下滑唤出底部导航栏（2.6.1 起取代「单击任意处唤出」，避免误触发遮挡内容）
+    var onBarReveal: (() -> Void)? = nil
     final class Coordinator: NSObject, WKNavigationDelegate, UIGestureRecognizerDelegate {
         weak var page: PageState? = nil
-        var edgeSwipeHome: (() -> Void)? = nil
-        var onWebViewTap: (() -> Void)? = nil
+        var onBarReveal: (() -> Void)? = nil
         var lastZoom: Double? = nil
         var lastFontAdjust: Double? = nil
         var clearRefreshObserver: NSObjectProtocol? = nil
@@ -252,14 +249,10 @@ struct PageWebView: UIViewRepresentable {
             if let obs = clearRefreshObserver { NotificationCenter.default.removeObserver(obs) }
         }
 
-        @objc func webViewTapped() { onWebViewTap?() }
+        @objc func barRevealed() { onBarReveal?() }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
-
-        @objc func edgeSwiped() {
-            edgeSwipeHome?()
-        }
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             decisionHandler(.allow)
@@ -299,7 +292,7 @@ struct PageWebView: UIViewRepresentable {
         webView.navigationDelegate = context.coordinator
         webView.pageZoom = zoom
         webView.currentBookmark = page.bookmark
-        context.coordinator.edgeSwipeHome = edgeSwipeHome
+        context.coordinator.onBarReveal = onBarReveal
 
         // 清缓存刷新：删掉该书签域名的全部站点数据（缓存/cookie/localStorage，登录态会丢）后重载
         context.coordinator.clearRefreshObserver = NotificationCenter.default.addObserver(
@@ -322,26 +315,34 @@ struct PageWebView: UIViewRepresentable {
 
         // 清掉旧手势再重挂：SwiftUI 重挂（锁屏回来等）会新建 Coordinator，
         // 旧手势的 target 弱引用旧 Coordinator 已释放 → 点屏无反应；且 name 判断会让它跳过重挂。
-        for g in (webView.gestureRecognizers ?? []) where g is UIScreenEdgePanGestureRecognizer || g.name == "barRevealTap" {
+        // ⚠️ 只删「我们自己 name 标记的」手势（barRevealSwipe / barRevealTap 及其前身 barRevealTap），
+        //    绝不按类型删 UIScreenEdgePanGestureRecognizer：WebKit 原生的页内前进/后退手势就是同类实例
+        //    （左边缘后退 + 右边缘前进，通常不止一个），按类型删会把「右滑后退」一起删掉——那正是本版要保住的交互。
+        //    旧版自定义边缘手势无需清理：它挂在 PageState 缓存的 WebView 上，而缓存实例不跨 App 重启存活，
+        //    升级后首次 makeUIView 拿到的都是新实例。
+        for g in (webView.gestureRecognizers ?? [])
+            where g.name == "barRevealSwipe" || g.name == "barRevealTap" {
             webView.removeGestureRecognizer(g)
         }
 
-        if edgeSwipeHome != nil {
-            let edgeGesture = UIScreenEdgePanGestureRecognizer(
-                target: context.coordinator, action: #selector(Coordinator.edgeSwiped))
-            edgeGesture.edges = .left
-            edgeGesture.delegate = context.coordinator
-            webView.addGestureRecognizer(edgeGesture)
+        // 2.6.1 删除「边缘右滑回主页」手势：书签首页右滑被送出 App 反直觉。
+        // 后退完全交给 WebKit 自带返回手势（allowsBackForwardNavigationGestures 已开），
+        // 回主页走底栏「主页」按钮/悬浮钮。
+
+        if onBarReveal != nil {
+            // 三指向下滑唤出底部导航栏（取代旧的「单击任意处」：后者太容易误触发、常遮挡内容）。
+            // 三指是系统未占用的手势组合（系统三指只在文本编辑态用于拷贝/粘贴/撤销），
+            // 浏览态零冲突；cancelsTouchesInView=false 保证不吞网页自身触摸。
+            let swipe = UISwipeGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.barRevealed))
+            swipe.name = "barRevealSwipe"
+            swipe.numberOfTouchesRequired = 3
+            swipe.direction = .down
+            swipe.cancelsTouchesInView = false
+            swipe.delegate = context.coordinator
+            webView.addGestureRecognizer(swipe)
         }
 
-        if onWebViewTap != nil {
-            // 浏览器式：单击网页任意处唤出底部导航栏；不吞触摸，网页本身的点击照常响应
-            let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.webViewTapped))
-            tap.name = "barRevealTap"
-            tap.cancelsTouchesInView = false
-            tap.delegate = context.coordinator
-            webView.addGestureRecognizer(tap)
-        }
+        // （旧的「单击任意处唤出底栏」已删，2.6.1 起改为三指向下滑；见上方 barRevealSwipe）
 
         // 首次创建才加载初始 URL；复用实例（后台/分屏搬回）保留当前页面不重载
         let isFirstLoad = webView.url == nil
@@ -355,7 +356,7 @@ struct PageWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        context.coordinator.edgeSwipeHome = edgeSwipeHome
+        context.coordinator.onBarReveal = onBarReveal
         webView.currentBookmark = page.bookmark
 
         // 只在值真的变了才写 WKWebView：每次 body 重算（如底栏显隐）都写 pageZoom / 跑 JS 会让网页闪一下、像刷新
@@ -380,7 +381,7 @@ struct PageWebView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator {
         let c = Coordinator()
         c.page = page
-        c.onWebViewTap = onWebViewTap
+        c.onBarReveal = onBarReveal
         return c
     }
 
@@ -397,7 +398,8 @@ private var kBookmarkKey: UInt8 = 0
 
 extension Notification.Name {
     static let launcherClearRefresh = Notification.Name("launcherClearRefresh")
-    /// 单击网页 → 通知底栏层唤出（避免页面本体持有状态导致 WebView 跟着重绘）
+    /// 网页内唤出底栏 → 通知底栏层（避免页面本体持有状态导致 WebView 跟着重绘）
+    /// 2.6.1 起触发源改为「三指向下滑」（旧单击手势已删），通知名保持不变（分屏侧也复用）
     static let launcherPageTapped = Notification.Name("launcherPageTapped")
 }
 
