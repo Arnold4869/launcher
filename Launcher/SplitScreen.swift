@@ -72,7 +72,11 @@ struct SplitViewScreen: View {
                 .overlay(alignment: .bottom) {
             // 底部浮动导航栏（悬浮在分屏之上，不改布局）
             // 分屏里可能有两个 WebView：工具面板/查找条作用在「可见的上半屏」
-            PageBottomBarLayer(mode: .page, currentPage: topPage, onMore: {
+            // 「主页」必须走 onHome 清掉分屏状态：只调 wm.goHome()（仅清 fullscreenID）
+            // 会让 SplitViewScreen（zIndex 3）继续盖在最上面，表现为「点了没反应」（2.6.2 修复）
+            PageBottomBarLayer(mode: .page, currentPage: topPage, onHome: {
+                exitSplitToHome()
+            }, onMore: {
                 activeWV = topPage?.webViewHolder ?? PageShare.visibleWebView()
                 showToolsPanel = true
             }, onFind: {
@@ -146,6 +150,20 @@ struct SplitViewScreen: View {
     }
 
     private enum Half { case top, bottom }
+
+    /// 退出分屏回主页：清全部 4 个分屏状态 + dismiss。
+    /// 与悬浮钮「主页」同一套逻辑（悬浮钮在分屏里一直好用，底栏此前漏了分屏状态）。
+    /// 注意：SplitViewScreen 是 LauncherApp pageLayer 里 ZStack 直接挂载的（不在 sheet 里），
+    /// 真正让它消失的是「清掉 splitTop/splitBottom」（挂载条件变假），dismiss() 只是兼容性兜底。
+    private func exitSplitToHome() {
+        savedFraction = topFraction
+        wm.goHome()               // 保险：清 fullscreenID（分屏时通常已是 nil）
+        wm.splitTop = nil
+        wm.splitBottom = nil
+        wm.splitTopPage = nil
+        wm.splitBottomPage = nil
+        dismiss()
+    }
 
     /// 实时书签：store 里的最新值（快捷设置/工具面板改了 uaMode/scale 立刻反映到这一半，
     /// 否则 SplitViewScreen 的 top/bottom 是创建时的值拷贝，改完会被 updateUIView 写回旧值）

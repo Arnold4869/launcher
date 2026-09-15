@@ -498,6 +498,9 @@ extension WKWebView {
 struct PageBottomBarLayer: View {
     var mode: PageBottomBar.BarMode = .page
     var currentPage: PageState? = nil
+    /// 「主页」动作回调：分屏场景要额外清分屏状态（fullscreenID 清了没用，split 还在）；
+    /// nil = 默认 wm.goHome()（全屏页场景够用）
+    var onHome: (() -> Void)? = nil
     /// 「更多」/「查找页面」动作回调：宿主（FullscreenPage）开工具面板/查找条
     var onMore: (() -> Void)? = nil
     var onFind: (() -> Void)? = nil
@@ -509,7 +512,7 @@ struct PageBottomBarLayer: View {
         ZStack(alignment: .bottom) {
             // 常驻挂载：隐藏 = 移出屏幕 + 透明 + 不响应点击，视图不销毁
             // 这样挂在本视图上的 sheet（多任务/分屏/设置等）不会被「自动隐藏」连带关掉
-            PageBottomBar(mode: mode, currentPage: currentPage, onMore: onMore, onFind: onFind)
+            PageBottomBar(mode: mode, currentPage: currentPage, onHome: onHome, onMore: onMore, onFind: onFind)
                 // 页面层整层 ignoresSafeArea（LauncherApp），底栏会贴到屏幕绝对底部、
                 // 比主页低一条小白条区域 → 手动补回底部安全区，与主页对齐
                 .padding(.bottom, Self.bottomSafeInset)
@@ -548,6 +551,8 @@ struct PageBottomBar: View {
     var mode: BarMode = .page
     /// 发起分屏时需要的当前页（page 模式下用）
     var currentPage: PageState? = nil
+    /// 「主页」动作回调：分屏场景要额外清分屏状态；nil = 默认 wm.goHome()
+    var onHome: (() -> Void)? = nil
     /// 「更多」点击回调（page 模式：弹页面工具面板）；nil = 老行为（弹 Menu）
     var onMore: (() -> Void)? = nil
     /// 「查找页面」回调（面板里点「查找页面」时用）
@@ -566,7 +571,11 @@ struct PageBottomBar: View {
     var body: some View {
         HStack(spacing: 0) {
             if mode == .page {
-                barButton("house", "主页") { wm.goHome() }
+                // 「主页」：全屏页 = wm.goHome()；分屏 = onHome（要额外清分屏状态，否则分屏层不消失）
+                // 显式写闭包（不用 `onHome ?? { ... }`：`??` 右侧闭包字面量的类型推断不可靠）
+                barButton("house", "主页") {
+                    if let onHome { onHome() } else { wm.goHome() }
+                }
                 barButton("square.on.square", "多任务") { showTaskSwitcher = true }
                 barButton("rectangle.split.2x1", "分屏") { showSplitPicker = true }
             } else {
