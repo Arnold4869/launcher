@@ -218,6 +218,11 @@ struct HomeBackgroundSettings: View {
     @State private var photoItem: PhotosPickerItem?
 
     var body: some View {
+        // ⚠️ 必须用 Group 包裹再交给 Form：
+        // 自定义 View 直接返回多个 Section 时，Form 不一定把它们当 Section 处理
+        // （可能被当成一整行内容渲染，标题/分组样式丢失）。Group 对 Form/List 是透明的，
+        // 内容会被展平成两个真正的 Section。
+        Group {
         Section {
             // 内置渐变：色板横排点选
             ScrollView(.horizontal, showsIndicators: false) {
@@ -285,5 +290,6 @@ struct HomeBackgroundSettings: View {
                 photoItem = nil
             }
         }
+        }   // Group 结束
     }
 }
