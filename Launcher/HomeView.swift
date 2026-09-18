@@ -114,6 +114,10 @@ struct BookmarkCard: View {
     /// 避免玻璃叠在系统浅色背景上几乎看不见）
     var variant: Variant = .glass
 
+    /// 观察使用时长变化信号：主页卡片进度线要随计时实时走（2.6.3）。
+    /// 只观察 tracker（不直接读它的 @Published 之外的东西），实际数值仍走 UsageBadgeCache 查询。
+    @ObservedObject private var usageTracker = UsageTracker.shared
+
     enum Variant { case glass, solid }
 
     /// 按 colorMode 解析品牌色（0随机 / 1图标取色 / 2自定义取色，走缓存）
@@ -151,6 +155,8 @@ struct BookmarkCard: View {
     private var glassBody: some View {
         // 一次查询同时拿到进度与锁定态（别分开调两次缓存）
         let st = limitState
+        // 显式消费刷新信号：usageRevision 变化触发本卡重渲染，进度线随计时实时走（2.6.3）
+        let _ = usageTracker.usageRevision
         // 低高度档（滑杆最小 60pt）自适应压缩：
         // 60pt - 上下各 12pt内边距 = 36pt 可用，装不下「圆点行 13pt + 两行字 ~29pt」；
         // 堆叠外层有 frame(height:) 裁剪，直接压字会糊 → 按高度收内边距并给标题留足余量

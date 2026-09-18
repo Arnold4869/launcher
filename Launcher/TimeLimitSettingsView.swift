@@ -114,6 +114,8 @@ struct TimeLimitSettingsView: View {
             mode = bookmark.unlockMode
             bonusMinutes = bookmark.unlockBonusMinutes
         }
+        // 已用秒数每 5 秒落地 → 「今日已用 X 分钟」跟着走（2.6.3）
+        .onChange(of: tracker.usageRevision) { _ in }
     }
 
     private func save() {

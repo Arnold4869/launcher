@@ -9,6 +9,11 @@ final class UsageTracker: ObservableObject {
     /// 当前在计时的书签 ID（前台全屏 1 个，或分屏 2 个）
     @Published private(set) var activeIDs: Set<UUID> = []
 
+    /// 展示刷新信号：已用秒数或解锁状态变化时 +1。
+    /// 进度条类视图（主页卡片进度线 / 多任务时间条 / 限时设置页）观察它实现实时刷新，
+    /// 避免各视图自挂秒级定时器。计时只在有活跃书签时结算，空闲时不会空转触发刷新。
+    @Published private(set) var usageRevision = 0
+
     private var sessionStart = Date()
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
@@ -54,6 +59,8 @@ final class UsageTracker: ObservableObject {
         sessionStart = Date()
         guard elapsed > 0 else { return }
         for id in activeIDs { add(elapsed, to: id) }
+        // 落地成功 → 发刷新信号（此时已用秒数真的变了，进度条/时间条据此重算）
+        usageRevision &+= 1
     }
 
     private func add(_ seconds: Double, to id: UUID) {
@@ -80,11 +87,13 @@ final class UsageTracker: ObservableObject {
     func resetToday(_ id: UUID) {
         UserDefaults.standard.removeObject(forKey: Self.usageKey(for: id))
         UsageBadgeCache.shared.invalidate(id)
+        usageRevision &+= 1
     }
 
     func markUnlockedToday(_ id: UUID) {
         UserDefaults.standard.set(true, forKey: Self.unlockedKey(for: id))
         UsageBadgeCache.shared.invalidate(id)
+        usageRevision &+= 1
     }
 
     func unlockedToday(_ id: UUID) -> Bool {
@@ -96,6 +105,7 @@ final class UsageTracker: ObservableObject {
         let target = max(0, Double(limitMinutes) - minutes) * 60
         UserDefaults.standard.set(target, forKey: Self.usageKey(for: id))
         UsageBadgeCache.shared.invalidate(id)
+        usageRevision &+= 1
     }
 
     // MARK: - keys（按天分桶，跨天自动重置）

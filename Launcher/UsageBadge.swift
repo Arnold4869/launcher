@@ -38,5 +38,7 @@ struct UsageBadge: View {
             }
             .frame(height: 4)
         }
+        // 已用秒数每 5 秒落地一次 → 重算并刷新时间条（2.6.3 修复：之前只有计时书签集合变化才刷新，数值涨了条不动）
+        .onChange(of: tracker.usageRevision) { _ in }
     }
 }
