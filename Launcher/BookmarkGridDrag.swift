@@ -347,7 +347,7 @@ final class GridDragUIView: UIView, UIGestureRecognizerDelegate {
     @objc private func handleLongPress(_ g: UILongPressGestureRecognizer) {
         switch g.state {
         case .began:
-            startPoint = currentPoint()
+            startPoint = currentPoint(g)
             lastPoint = startPoint
             didDrag = false
             startOffsetY = ancestorScrollView?.contentOffset.y ?? 0
@@ -355,7 +355,7 @@ final class GridDragUIView: UIView, UIGestureRecognizerDelegate {
             onLift()
             startAutoScroll()
         case .changed:
-            let now = currentPoint()
+            let now = currentPoint(g)
             lastPoint = now
             let sc = ancestorScrollView
             let curOffsetY = sc?.contentOffset.y ?? startOffsetY
@@ -375,7 +375,7 @@ final class GridDragUIView: UIView, UIGestureRecognizerDelegate {
             }
             onMoved(now, startPoint, delta)
         case .ended:
-            finish()
+            finish(g)
         case .cancelled, .failed:
             // .failed 多见于手势被别处抢走：绝不能当松手处理（会误弹菜单）
             stopAutoScroll()
@@ -387,16 +387,17 @@ final class GridDragUIView: UIView, UIGestureRecognizerDelegate {
         }
     }
 
-    private func finish() {
+    private func finish(_ g: UIGestureRecognizer) {
         stopAutoScroll()
         resumeOuterScroll()
-        onEnd(.finished(didMove: didDrag, point: currentPoint()))
+        onEnd(.finished(didMove: didDrag, point: currentPoint(g)))
         didDrag = false
     }
 
-    /// 手指在窗口坐标系的位置（视图本身在滚动容器里会动，view 坐标不可靠）
-    private func currentPoint() -> CGPoint {
-        location(in: window)
+    /// 手指在窗口坐标系的位置（视图本身在滚动容器里会动，view 坐标不可靠；
+    /// UIView 没有 location(in:)，必须问手势要）
+    private func currentPoint(_ g: UIGestureRecognizer) -> CGPoint {
+        g.location(in: g.view?.window)
     }
 
     // MARK: 外层滚动
