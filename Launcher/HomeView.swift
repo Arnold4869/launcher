@@ -14,6 +14,10 @@ struct HomeView: View {
     @State private var showSplitPicker = false
     @State private var splitTop: Bookmark?
     @State private var splitTopPage: PageState?
+    // 2.7.0 长按拖动排序：拖动共享状态
+    @StateObject private var gridDrag = BookmarkGridDragController()
+    // 2.7.0 长按（未移动）松手弹出的菜单目标
+    @State private var menuTarget: Bookmark?
 
     var body: some View {
         NavigationStack {
@@ -35,38 +39,19 @@ struct HomeView: View {
                         }
                     } else {
                         ScrollView {
-                            LazyVGrid(columns: gridColumns, spacing: 14) {
-                                ForEach(store.bookmarks) { bm in
-                                    Button {
-                                        wm.open(bm)
-                                    } label: {
-                                        BookmarkCard(bm: bm, cardHeight: CGFloat(cardHeight), fontScale: CGFloat(fontScale))
-                                    }
-                                    .contextMenu {
-                                        Button {
-                                            editing = bm
-                                        } label: {
-                                            Label("编辑", systemImage: "pencil")
-                                        }
-                                        Button {
-                                            splitTop = bm
-                                            splitTopPage = wm.pages.first { $0.bookmark.id == bm.id }
-                                            showSplitPicker = true
-                                        } label: {
-                                            Label("分屏打开", systemImage: "rectangle.split.2x1")
-                                        }
-                                        Button(role: .destructive) {
-                                            store.bookmarks.removeAll { $0.id == bm.id }
-                                        } label: {
-                                            Label("删除", systemImage: "trash")
-                                        }
-                                    }
-                                }
-                                // 末尾大加号卡片：跟书签同尺寸，一眼知道是添加
-                                AddBookmarkCard(cardHeight: CGFloat(cardHeight)) {
-                                    showAdd = true
-                                }
-                            }
+                            // 长按拖动排序的网格（2.7.0）：不再用 LazyVGrid —— 拖动需要槽位坐标
+                            // 可控 + 换位平滑滑动，见 BookmarkGridDrag.swift 顶部说明
+                            BookmarkGrid(
+                                items: store.bookmarks,
+                                columns: gridColumnsCount,
+                                cardHeight: CGFloat(cardHeight),
+                                fontScale: CGFloat(fontScale),
+                                drag: gridDrag,
+                                onTap: { wm.open($0) },
+                                onMenu: { menuTarget = $0 },
+                                onAdd: { showAdd = true },
+                                onReorder: { list in store.bookmarks = list }
+                            )
                             .padding()
                         }
                     }
@@ -91,6 +76,32 @@ struct HomeView: View {
             .sheet(item: $editing) { bm in
                 BookmarkEditView(store: store, bookmark: bm)
             }
+            // 2.7.0 长按菜单：自绘覆盖层，不用 .contextMenu（会吃掉长按序列导致拖不动），
+            // 也不用 confirmationDialog（在它 dismiss 的同时 present sheet 会被 iOS 静默拒绝，见坑 17c）
+            .overlay {
+                if let bm = menuTarget {
+                    BookmarkCardMenu(
+                        anchor: gridDrag.menuAnchor,
+                        onEdit: {
+                            menuTarget = nil
+                            editing = bm
+                        },
+                        onSplit: {
+                            menuTarget = nil
+                            splitTop = bm
+                            splitTopPage = wm.pages.first { $0.bookmark.id == bm.id }
+                            showSplitPicker = true
+                        },
+                        onDelete: {
+                            menuTarget = nil
+                            store.bookmarks.removeAll { $0.id == bm.id }
+                        },
+                        onCancel: { menuTarget = nil }
+                    )
+                    // 菜单弹出/收回的缩放淡入（配 BookmarkCardMenu 里的 transition）
+                    .animation(.spring(response: 0.25, dampingFraction: 0.8), value: menuTarget?.id)
+                }
+            }
             .sheet(isPresented: $showSplitPicker) {
                 if let top = splitTop {
                     SplitPickerView(top: top, topPage: splitTopPage)
@@ -101,9 +112,7 @@ struct HomeView: View {
         }
     }
 
-    private var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 14), count: gridColumnsCount)
-    }
+    // 网格列数由 BookmarkGrid 内部按宽度算（拖动排序需要精确槽位坐标）
 }
 
 struct BookmarkCard: View {
