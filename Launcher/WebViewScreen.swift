@@ -300,19 +300,21 @@ struct PageWebView: UIViewRepresentable {
         // 清缓存刷新：删掉该书签域名的全部站点数据（缓存/cookie/localStorage，登录态会丢）后重载。
         // 2026-11-12 加强：同时清 URLCache（WKWebView 进程内的内存缓存），否则 reload 仍命中旧内存缓存，
         // 表现为「点了清缓存还加载旧内容」。reload 后 WebView 会重新向服务器验证。
+        // 2026-11-12 再修：用 reloadFromOrigin() 替代 reload()——reload 默认 cachePolicy 可能仍用 HTTP 缓存，
+        // reloadFromOrigin 强制忽略缓存、从服务器重新拉取（这才是「清缓存后强制刷新」的正解）。
         context.coordinator.clearRefreshObserver = NotificationCenter.default.addObserver(
             forName: .launcherClearRefresh, object: nil, queue: .main) { [weak webView] note in
             guard let targetID = note.object as? UUID,
                   let webView, webView.currentBookmark.id == targetID else { return }
             guard let url = URL(string: webView.currentBookmark.urlString),
-                  let host = url.host else { webView.reload(); return }
+                  let host = url.host else { webView.reloadFromOrigin(); return }
             let types = WKWebsiteDataStore.allWebsiteDataTypes()
             WKWebsiteDataStore.default().fetchDataRecords(ofTypes: types) { records in
                 let matching = records.filter { $0.displayName.contains(host) }
                 WKWebsiteDataStore.default().removeData(ofTypes: types, for: matching) {
                     DispatchQueue.main.async {
                         URLCache.shared.removeAllCachedResponses()
-                        webView.reload()
+                        webView.reloadFromOrigin()
                     }
                 }
             }

@@ -295,17 +295,18 @@ struct SplitWebView: UIViewRepresentable {
         }
         // 清缓存刷新（分屏 FAB 触发时上下两半都要响应）
         // 2026-11-12 加强：同时清 URLCache（WKWebView 进程内内存缓存），否则 reload 仍命中旧内存缓存
+        // 2026-11-12 再修：reloadFromOrigin() 替代 reload()，强制忽略缓存从服务器重新拉取
         context.coordinator.clearRefreshObserver = NotificationCenter.default.addObserver(
             forName: .launcherClearRefresh, object: nil, queue: .main) { [weak fresh] note in
             guard let targetID = note.object as? UUID, let fresh, fresh.currentBookmark.id == targetID else { return }
-            guard let url = URL(string: bm.urlString), let host = url.host else { fresh.reload(); return }
+            guard let url = URL(string: bm.urlString), let host = url.host else { fresh.reloadFromOrigin(); return }
             let types = WKWebsiteDataStore.allWebsiteDataTypes()
             WKWebsiteDataStore.default().fetchDataRecords(ofTypes: types) { records in
                 let matching = records.filter { $0.displayName.contains(host) }
                 WKWebsiteDataStore.default().removeData(ofTypes: types, for: matching) {
                     DispatchQueue.main.async {
                         URLCache.shared.removeAllCachedResponses()
-                        fresh.reload()
+                        fresh.reloadFromOrigin()
                     }
                 }
             }
