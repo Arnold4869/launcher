@@ -20,6 +20,7 @@ struct PageToolsPanel: View {
     let wv: WKWebView
     var onFind: (() -> Void)? = nil
     var onZoom: (() -> Void)? = nil
+    var onClearCache: (() -> Void)? = nil
 
     @EnvironmentObject var store: BookmarkStore
     @Environment(\.dismiss) private var dismiss
@@ -104,6 +105,10 @@ struct PageToolsPanel: View {
                                     .foregroundStyle(.tertiary)
                             }
                         }
+                    }
+                    // 清除缓存：删掉当前站点域名的缓存/cookie/localStorage 后重载
+                    if let onClearCache {
+                        row("清除缓存", "arrow.clockwise") { closeThen(onClearCache) }
                     }
                 }
 

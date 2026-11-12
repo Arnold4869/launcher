@@ -97,7 +97,13 @@ struct SplitViewScreen: View {
             if let wv = activeWV {
                 PageToolsPanel(wv: wv,
                                onFind: { showFind = true },
-                               onZoom: { showQuickSettings = true })
+                               onZoom: { showQuickSettings = true },
+                               onClearCache: {
+                                   // 工具面板作用于上半屏（activeWV），清缓存也发到对应半屏
+                                   let target = topPage ?? wm.splitTopPage
+                                   NotificationCenter.default.post(name: .launcherClearRefresh,
+                                                                   object: target?.id ?? wv.currentBookmark.id)
+                               })
                     .environmentObject(store)
             }
         }
@@ -288,6 +294,7 @@ struct SplitWebView: UIViewRepresentable {
             fresh.addGestureRecognizer(swipe)
         }
         // 清缓存刷新（分屏 FAB 触发时上下两半都要响应）
+        // 2026-11-12 加强：同时清 URLCache（WKWebView 进程内内存缓存），否则 reload 仍命中旧内存缓存
         context.coordinator.clearRefreshObserver = NotificationCenter.default.addObserver(
             forName: .launcherClearRefresh, object: nil, queue: .main) { [weak fresh] note in
             guard let targetID = note.object as? UUID, let fresh, fresh.currentBookmark.id == targetID else { return }
@@ -296,7 +303,10 @@ struct SplitWebView: UIViewRepresentable {
             WKWebsiteDataStore.default().fetchDataRecords(ofTypes: types) { records in
                 let matching = records.filter { $0.displayName.contains(host) }
                 WKWebsiteDataStore.default().removeData(ofTypes: types, for: matching) {
-                    DispatchQueue.main.async { fresh.reload() }
+                    DispatchQueue.main.async {
+                        URLCache.shared.removeAllCachedResponses()
+                        fresh.reload()
+                    }
                 }
             }
         }

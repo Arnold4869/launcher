@@ -100,7 +100,10 @@ struct FullscreenPage: View {
             if let wv = page.webViewHolder {
                 PageToolsPanel(wv: wv,
                                onFind: { showFind = true },
-                               onZoom: { showQuickSettings = true })
+                               onZoom: { showQuickSettings = true },
+                               onClearCache: {
+                                   NotificationCenter.default.post(name: .launcherClearRefresh, object: page.bookmark.id)
+                               })
                     .environmentObject(store)
             }
         }
@@ -294,7 +297,9 @@ struct PageWebView: UIViewRepresentable {
         webView.currentBookmark = page.bookmark
         context.coordinator.onBarReveal = onBarReveal
 
-        // 清缓存刷新：删掉该书签域名的全部站点数据（缓存/cookie/localStorage，登录态会丢）后重载
+        // 清缓存刷新：删掉该书签域名的全部站点数据（缓存/cookie/localStorage，登录态会丢）后重载。
+        // 2026-11-12 加强：同时清 URLCache（WKWebView 进程内的内存缓存），否则 reload 仍命中旧内存缓存，
+        // 表现为「点了清缓存还加载旧内容」。reload 后 WebView 会重新向服务器验证。
         context.coordinator.clearRefreshObserver = NotificationCenter.default.addObserver(
             forName: .launcherClearRefresh, object: nil, queue: .main) { [weak webView] note in
             guard let targetID = note.object as? UUID,
@@ -305,7 +310,10 @@ struct PageWebView: UIViewRepresentable {
             WKWebsiteDataStore.default().fetchDataRecords(ofTypes: types) { records in
                 let matching = records.filter { $0.displayName.contains(host) }
                 WKWebsiteDataStore.default().removeData(ofTypes: types, for: matching) {
-                    DispatchQueue.main.async { webView.reload() }
+                    DispatchQueue.main.async {
+                        URLCache.shared.removeAllCachedResponses()
+                        webView.reload()
+                    }
                 }
             }
         }
