@@ -297,7 +297,8 @@ struct PageWebView: UIViewRepresentable {
         webView.currentBookmark = page.bookmark
         context.coordinator.onBarReveal = onBarReveal
 
-        // 清缓存刷新：删掉该书签域名的全部站点数据（缓存/cookie/localStorage，登录态会丢）后重载。
+        // 清缓存刷新：全局清掉所有网站的缓存/cookie/localStorage（老板拍板：launcher 是个人工具，全量清最省事，
+        // 不再按域名定向匹配——WebKit 对带端口站点（如 :2088）的 displayName 格式不匹配 host，导致定向清删了个寂寞）。
         // 2026-11-12 加强：同时清 URLCache（WKWebView 进程内的内存缓存），否则 reload 仍命中旧内存缓存，
         // 表现为「点了清缓存还加载旧内容」。reload 后 WebView 会重新向服务器验证。
         // 2026-11-12 再修：用 reloadFromOrigin() 替代 reload()——reload 默认 cachePolicy 可能仍用 HTTP 缓存，
@@ -306,12 +307,9 @@ struct PageWebView: UIViewRepresentable {
             forName: .launcherClearRefresh, object: nil, queue: .main) { [weak webView] note in
             guard let targetID = note.object as? UUID,
                   let webView, webView.currentBookmark.id == targetID else { return }
-            guard let url = URL(string: webView.currentBookmark.urlString),
-                  let host = url.host else { webView.reloadFromOrigin(); return }
             let types = WKWebsiteDataStore.allWebsiteDataTypes()
             WKWebsiteDataStore.default().fetchDataRecords(ofTypes: types) { records in
-                let matching = records.filter { $0.displayName.contains(host) }
-                WKWebsiteDataStore.default().removeData(ofTypes: types, for: matching) {
+                WKWebsiteDataStore.default().removeData(ofTypes: types, for: records) {
                     DispatchQueue.main.async {
                         URLCache.shared.removeAllCachedResponses()
                         webView.reloadFromOrigin()
